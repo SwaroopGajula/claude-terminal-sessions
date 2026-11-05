@@ -9,6 +9,12 @@
   See what each session was about, what it changed, and jump back in with one click.
 </p>
 
+<p align="center">
+  <a href="https://marketplace.visualstudio.com/items?itemName=SwaroopGajula.claude-terminal-sessions"><img src="https://img.shields.io/visual-studio-marketplace/v/SwaroopGajula.claude-terminal-sessions?label=VS%20Code%20Marketplace&color=B24E2C" alt="VS Code Marketplace version"></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=SwaroopGajula.claude-terminal-sessions"><img src="https://img.shields.io/visual-studio-marketplace/i/SwaroopGajula.claude-terminal-sessions?color=B24E2C" alt="Installs"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-B24E2C" alt="MIT license"></a>
+</p>
+
 ---
 
 ## Why
@@ -75,6 +81,16 @@ Resume in terminal · Open conversation · Copy session ID · Copy resume comman
 - [Claude Code](https://docs.claude.com/en/docs/claude-code) installed and on your `PATH` (needed to resume sessions)
 
 ## Installation
+
+**From the VS Code Marketplace (recommended)**
+
+- [Install from the Marketplace](https://marketplace.visualstudio.com/items?itemName=SwaroopGajula.claude-terminal-sessions), or
+- in VS Code open the **Extensions** panel and search **Claude Terminal Sessions**, or
+- run:
+
+  ```bash
+  code --install-extension SwaroopGajula.claude-terminal-sessions
+  ```
 
 **From a `.vsix` file**
 
