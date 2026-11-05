@@ -74,10 +74,25 @@ Right-click a session → **Share**:
 | **Export for Reading (.md)** | A readable Markdown file: prompts, Claude's replies, files changed and commands run (no command output) | No |
 | **Export to Continue on Another Computer** | A `.claude-session.json` file they can import and **resume with full context** | Yes |
 
-**To continue a shared session:** click **Import Shared Session** in the toolbar, pick the `.claude-session.json` file,
-then choose your local copy of the project (folders with the same name are suggested first). The extension then offers
-to resume it straight away. If the session already exists on your computer, it is imported as a copy with a new session ID.
-For best results, check out the same git branch the session was on (shown after import).
+#### Export (the person sharing)
+1. Open the **Claude Terminal Sessions** sidebar and find the session.
+2. Right-click it and choose **Share: Export for Reading (.md)** or **Share: Export to Continue on Another Computer**.
+3. Read the warning. It shows how many likely secrets were removed automatically. Click **Save…**.
+4. Choose where to save the file (defaults to your `Downloads` folder).
+5. Click **Open** to check the file, then send it (Slack, email, shared drive…).
+
+#### Import (the person receiving)
+*A `.md` export needs no import: just open it in any editor or Markdown viewer.*
+
+For a `.claude-session.json` export:
+1. Install **Claude Terminal Sessions** and [Claude Code](https://docs.claude.com/en/docs/claude-code).
+2. Get the same project on your computer (clone the repo). Ideally check out the branch the session was on.
+3. Open the **Claude Terminal Sessions** sidebar and click **Import Shared Session** (📥) in the toolbar.
+4. Pick the `.claude-session.json` file.
+5. Choose your local copy of the project. Folders with the same name are suggested first, or use **Browse…**.
+6. If the session already exists on your computer, choose **Import as a copy** (it gets a new session ID).
+7. Click **Resume now**. Claude Code opens in that folder with the full conversation, ready to continue.
+   The session also appears in the sidebar, so you can resume it later.
 
 **Before you share:** session files can contain anything that went through the session, including command output,
 file contents, environment variables and internal URLs. The extension:
