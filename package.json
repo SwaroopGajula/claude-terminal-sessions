@@ -2,7 +2,7 @@
   "name": "claude-terminal-sessions",
   "displayName": "Claude Terminal Sessions",
   "description": "Browse, search and resume your Claude Code terminal sessions from every project folder, right in the VS Code sidebar.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "publisher": "SwaroopGajula",
   "license": "MIT",
   "repository": {
@@ -115,6 +115,21 @@
         "command": "claudeSessions.runShellCommand",
         "title": "Paste Command into Terminal (not run)",
         "icon": "$(terminal)"
+      },
+      {
+        "command": "claudeSessions.exportMarkdown",
+        "title": "Share: Export for Reading (.md)",
+        "icon": "$(markdown)"
+      },
+      {
+        "command": "claudeSessions.exportSession",
+        "title": "Share: Export to Continue on Another Computer",
+        "icon": "$(export)"
+      },
+      {
+        "command": "claudeSessions.importSession",
+        "title": "Import Shared Session…",
+        "icon": "$(desktop-download)"
       }
     ],
     "menus": {
@@ -138,6 +153,11 @@
           "command": "claudeSessions.clearFilter",
           "when": "view == claudeSessions.list && claudeSessions.filtered",
           "group": "navigation@0"
+        },
+        {
+          "command": "claudeSessions.importSession",
+          "when": "view == claudeSessions.list",
+          "group": "navigation@2.5"
         }
       ],
       "view/item/context": [
@@ -200,6 +220,16 @@
           "command": "claudeSessions.runShellCommand",
           "when": "viewItem == sessionCommand",
           "group": "1_main@2"
+        },
+        {
+          "command": "claudeSessions.exportMarkdown",
+          "when": "viewItem == session",
+          "group": "3_share@1"
+        },
+        {
+          "command": "claudeSessions.exportSession",
+          "when": "viewItem == session",
+          "group": "3_share@2"
         }
       ],
       "commandPalette": [
@@ -233,6 +263,14 @@
         },
         {
           "command": "claudeSessions.runShellCommand",
+          "when": "false"
+        },
+        {
+          "command": "claudeSessions.exportMarkdown",
+          "when": "false"
+        },
+        {
+          "command": "claudeSessions.exportSession",
           "when": "false"
         }
       ]

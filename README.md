@@ -66,14 +66,36 @@ When you use Claude Code across many repos, sessions pile up in different folder
 | **Changed file** | Opens the file | |
 | **Command run** | Shows it in the conversation | Copy, or paste into a terminal (not run until you press Enter) |
 
+### Share a session with someone else
+Right-click a session → **Share**:
+
+| Option | What the other person gets | Needs Claude Code? |
+|---|---|---|
+| **Export for Reading (.md)** | A readable Markdown file: prompts, Claude's replies, files changed and commands run (no command output) | No |
+| **Export to Continue on Another Computer** | A `.claude-session.json` file they can import and **resume with full context** | Yes |
+
+**To continue a shared session:** click **Import Shared Session** in the toolbar, pick the `.claude-session.json` file,
+then choose your local copy of the project (folders with the same name are suggested first). The extension then offers
+to resume it straight away. If the session already exists on your computer, it is imported as a copy with a new session ID.
+For best results, check out the same git branch the session was on (shown after import).
+
+**Before you share:** session files can contain anything that went through the session, including command output,
+file contents, environment variables and internal URLs. The extension:
+- removes likely secrets automatically (GitHub, GitLab, npm, Slack and Stripe tokens, AWS and Google keys, Anthropic and OpenAI keys, JWTs, private keys, passwords in URLs, and values of settings like `DB_PASSWORD` or `API_KEY`) and tells you how many it found
+- leaves out Claude Code's internal request logs
+- warns you before every export
+
+Automatic detection is not perfect. **Read the file before sharing it**, and only share with people who may see that code and data.
+
 ### Toolbar
 - 🔍 **Filter** by title, prompt text, folder, branch or session ID
 - 🌲 **Group by** date or folder
+- 📥 **Import Shared Session** from a `.claude-session.json` file
 - 🔄 **Refresh** (the list also refreshes when sessions change)
 
 ### Session right-click menu
 Resume in terminal · Open conversation · Copy session ID · Copy resume command
-(`cd '<folder>' && claude --resume <id>`) · Open folder in new window · Open raw transcript (`.jsonl`)
+(`cd '<folder>' && claude --resume <id>`) · Open folder in new window · Open raw transcript (`.jsonl`) · Share: Export for Reading · Share: Export to Continue on Another Computer
 
 ## Requirements
 
@@ -95,7 +117,7 @@ Resume in terminal · Open conversation · Copy session ID · Copy resume comman
 **From a `.vsix` file**
 
 ```bash
-code --install-extension claude-terminal-sessions-0.3.0.vsix
+code --install-extension claude-terminal-sessions-0.4.0.vsix
 ```
 
 or in VS Code: **Extensions** panel → `···` menu → **Install from VSIX…**
@@ -114,6 +136,7 @@ Then click the **Claude Terminal Sessions** icon in the activity bar.
 
 Everything stays on your machine. The extension only **reads** the session files in `~/.claude/projects`.
 It never changes them and never sends anything over the network. Each user sees only their own sessions.
+Exports are only written where you choose to save them, and importing only adds a new session file under `~/.claude/projects`.
 
 ## Building from source
 
