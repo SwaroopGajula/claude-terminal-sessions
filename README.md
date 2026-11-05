@@ -179,7 +179,8 @@ To release a new version:
    git push && git push --tags
    ```
 3. The workflow tests and builds, creates a GitHub Release with the `.vsix` and the changelog notes, and publishes to the
-   VS Code Marketplace (if the `VSCE_PAT` secret is set) and Open VSX (if the `OVSX_PAT` secret is set).
+   VS Code Marketplace using **Trusted Publishing** (no token stored; set up once under the publisher's *Trusted Publishing* tab
+   for this repo and `release.yml`), and to Open VSX if the `OVSX_PAT` secret is set.
 
 ## Notes
 
