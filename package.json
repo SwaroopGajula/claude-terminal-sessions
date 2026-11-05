@@ -3,7 +3,7 @@
   "displayName": "Claude Terminal Sessions",
   "description": "Browse, search and resume your Claude Code terminal sessions from every project folder, right in the VS Code sidebar.",
   "version": "0.3.0",
-  "publisher": "local",
+  "publisher": "SwaroopGajula",
   "license": "MIT",
   "repository": {
     "type": "git",
