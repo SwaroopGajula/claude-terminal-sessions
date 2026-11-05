@@ -1,0 +1,69 @@
+name: Release
+
+# Push a tag like v0.4.1 (matching "version" in package.json) to:
+#   1. test and build the .vsix
+#   2. create a GitHub Release with the .vsix attached
+#   3. publish to the VS Code Marketplace  (only if the VSCE_PAT secret is set)
+#   4. publish to Open VSX                 (only if the OVSX_PAT secret is set)
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write # needed to create the GitHub Release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      OVSX_PAT: ${{ secrets.OVSX_PAT }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check tag matches package.json version
+        run: |
+          PKG_VERSION="v$(node -p "require('./package.json').version")"
+          if [ "$PKG_VERSION" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $PKG_VERSION. Bump the version or fix the tag."
+            exit 1
+          fi
+
+      - name: Check syntax
+        run: npm run lint
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build .vsix
+        run: npm run package
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VSIX=$(ls *.vsix)
+          NOTES=$(awk -v v="## ${GITHUB_REF_NAME#v}" '$0==v{f=1;next} /^## /{f=0} f' CHANGELOG.md)
+          if [ -z "$NOTES" ]; then NOTES="See CHANGELOG.md"; fi
+          gh release create "$GITHUB_REF_NAME" "$VSIX" \
+            --title "$GITHUB_REF_NAME" \
+            --notes "$NOTES
+
+          **Install:** search **Claude Terminal Sessions** in the VS Code Extensions panel, or download \`$VSIX\` below and run
+          \`code --install-extension $VSIX\`"
+
+      - name: Publish to VS Code Marketplace
+        if: env.VSCE_PAT != ''
+        run: npx --yes @vscode/vsce@4.1.0 publish --packagePath *.vsix
+
+      - name: Publish to Open VSX
+        if: env.OVSX_PAT != ''
+        run: npx --yes ovsx@1.3.0 publish *.vsix -p "$OVSX_PAT"
+
+      - name: Skipped publishing
+        if: env.VSCE_PAT == ''
+        run: echo "::notice::VSCE_PAT secret not set, so the Marketplace publish was skipped. Upload the .vsix from the GitHub Release manually, or add the secret."

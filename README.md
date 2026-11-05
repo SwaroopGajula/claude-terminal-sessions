@@ -153,16 +153,33 @@ Everything stays on your machine. The extension only **reads** the session files
 It never changes them and never sends anything over the network. Each user sees only their own sessions.
 Exports are only written where you choose to save them, and importing only adds a new session file under `~/.claude/projects`.
 
-## Building from source
+## Development
 
 ```bash
 git clone https://github.com/SwaroopGajula/claude-terminal-sessions.git
 cd claude-terminal-sessions
-npx @vscode/vsce package
+npm run lint      # syntax check
+npm test          # unit tests (secret removal, import rewriting)
+npm run package   # builds claude-terminal-sessions-<version>.vsix
 code --install-extension claude-terminal-sessions-*.vsix
 ```
 
-There is no build step: the extension is a single plain JavaScript file (`extension.js`) with no dependencies.
+There is no build step and there are no runtime dependencies: `extension.js` (UI) and `share.js` (export/import logic) are plain JavaScript.
+
+### Automatic builds and releases (GitHub Actions)
+- **CI** (`.github/workflows/ci.yml`): every push to `main` and every pull request runs the checks and tests and builds the `.vsix`.
+  Download it from the run page under **Artifacts**.
+- **Release** (`.github/workflows/release.yml`): runs when a version tag is pushed.
+
+To release a new version:
+1. Bump `"version"` in `package.json` (e.g. `0.4.1`) and add a `## 0.4.1` section to `CHANGELOG.md`.
+2. Commit, then tag and push:
+   ```bash
+   git tag v0.4.1
+   git push && git push --tags
+   ```
+3. The workflow tests and builds, creates a GitHub Release with the `.vsix` and the changelog notes, and publishes to the
+   VS Code Marketplace (if the `VSCE_PAT` secret is set) and Open VSX (if the `OVSX_PAT` secret is set).
 
 ## Notes
 

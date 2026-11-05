@@ -3,3 +3,5 @@ node_modules
 media/icon-full.svg
 .gitignore
 .git
+.github/**
+test/**
