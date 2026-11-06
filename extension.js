@@ -4,6 +4,9 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const share = require('./share');
+const running = require('./running');
+const followups = require('./followups');
+const summary = require('./summary');
 
 const PROJECTS_DIR = path.join(os.homedir(), '.claude', 'projects');
 const cache = new Map(); // file -> { mtimeMs, size, session }
@@ -114,6 +117,8 @@ function parseDetails(s) {
   const prompts = [];   // { text, time, line }
   const commands = [];  // { cmd, desc, time, line }
   const files = new Map(); // path -> { count, line }
+  const edits = [];     // { path, tool, time }
+  const cmdById = new Map(); // tool_use id -> command (to mark failures)
   const seen = new Set();
   const md = [];
   const push = (str) => { md.push(str); return md.length - 1; };
@@ -136,6 +141,11 @@ function parseDetails(s) {
     const time = o.timestamp ? new Date(o.timestamp) : null;
 
     if (o.type === 'user') {
+      if (Array.isArray(o.message.content)) {
+        for (const b of o.message.content) {
+          if (b && b.type === 'tool_result' && b.is_error && cmdById.has(b.tool_use_id)) cmdById.get(b.tool_use_id).failed = true;
+        }
+      }
       if (o.isMeta || o.isCompactSummary) continue;
       const text = cleanPrompt(textOf(o.message.content));
       if (!text) continue;
@@ -163,13 +173,16 @@ function parseDetails(s) {
         const inp = b.input || {};
         if (b.name === 'Bash' && inp.command) {
           const ln = push(`- 💻 \`${truncate(inp.command.replace(/\s+/g, ' '), 200)}\`${inp.description ? ` — ${inp.description}` : ''}`);
-          commands.push({ cmd: inp.command, desc: inp.description || '', time, line: ln });
+          const c = { cmd: inp.command, desc: inp.description || '', time, line: ln, failed: false };
+          commands.push(c);
+          if (b.id) cmdById.set(b.id, c);
         } else if (EDIT_TOOLS.has(b.name) && (inp.file_path || inp.notebook_path)) {
           const p = inp.file_path || inp.notebook_path;
           const ln = push(`- ✏️ **${b.name}** \`${shortPath(p)}\``);
           const f = files.get(p) || { count: 0, line: ln, tools: new Set() };
           f.count++; f.tools.add(b.name);
           files.set(p, f);
+          edits.push({ path: p, tool: b.name, time });
         } else {
           const hint = inp.file_path || inp.pattern || inp.query || inp.url || inp.description || inp.prompt || '';
           push(`- 🔧 **${b.name}**${hint ? ` \`${truncate(String(hint).replace(/\s+/g, ' '), 120)}\`` : ''}`);
@@ -177,7 +190,7 @@ function parseDetails(s) {
       }
     }
   }
-  return { prompts, commands, files, markdown: md.join('\n') };
+  return { prompts, commands, files, edits, markdown: md.join('\n') };
 }
 
 const SCHEME = 'claude-session';
@@ -284,14 +297,22 @@ function mdEscape(s) {
 
 // ---------- tree ----------
 
+const FOLLOWUPS_KEY = 'claudeSessions.followups';
+
 class SessionsProvider {
-  constructor() {
+  constructor(state) {
     this._em = new vscode.EventEmitter();
     this.onDidChangeTreeData = this._em.event;
     this.filter = '';
     this.sessions = [];
+    this.state = state; // vscode Memento (globalState) for follow-ups
+    this.running = new Map();
+    this.refreshRunning();
   }
-  refresh() { this.sessions = []; this._em.fire(); }
+  refresh() { this.sessions = []; this.refreshRunning(); this._em.fire(); }
+  refreshRunning() { this.running = running.readRunning(); }
+  followups() { return (this.state && this.state.get(FOLLOWUPS_KEY)) || {}; }
+  async setFollowups(map) { await this.state.update(FOLLOWUPS_KEY, map); this._em.fire(); }
 
   getSessions() {
     if (!this.sessions.length) {
@@ -309,23 +330,35 @@ class SessionsProvider {
     if (!el) {
       const list = this.getSessions();
       if (!list.length) return [{ kind: 'empty' }];
+      const roots = [];
+      const byId = new Map(list.map((s) => [s.id, s]));
+      const fu = followups.sortedFollowups(this.followups()).filter(([id]) => byId.has(id));
+      if (fu.length) roots.push({ kind: 'group', key: 'Follow-ups', special: 'followups', items: fu.map(([id]) => byId.get(id)), groupBy });
+      const run = list.filter((s) => this.running.has(s.id))
+        .sort((a, b) => running.rank(this.running.get(b.id)) - running.rank(this.running.get(a.id)) || b.updated - a.updated);
+      if (run.length) roots.push({ kind: 'group', key: 'Running', special: 'running', items: run, groupBy });
       const groups = new Map();
       for (const s of list) {
         const key = groupBy === 'folder' ? s.cwd : dateBucket(s.updated);
         if (!groups.has(key)) groups.set(key, []);
         groups.get(key).push(s);
       }
-      return [...groups.entries()].map(([key, items], i) => ({ kind: 'group', key, items, groupBy, first: i === 0 }));
+      return roots.concat([...groups.entries()].map(([key, items], i) => ({ kind: 'group', key, items, groupBy, first: i === 0 })));
     }
-    if (el.kind === 'group') return el.items.map((s) => ({ kind: 'session', s, groupBy }));
+    if (el.kind === 'group') return el.items.map((s) => ({ kind: 'session', s, groupBy, groupKey: el.key, special: el.special }));
     const s = el.s;
     if (el.kind === 'session') {
       const d = getDetails(s);
       const kids = [
         { kind: 'action', s, label: 'Resume session', icon: 'play', cmd: 'claudeSessions.resume', desc: `claude --resume ${s.id.slice(0, 8)}…` },
+        { kind: 'action', s, label: 'Fork session', icon: 'repo-forked', cmd: 'claudeSessions.fork', desc: 'new branch of this conversation' },
         { kind: 'action', s, label: 'Open conversation', icon: 'book', cmd: 'claudeSessions.openConversation', desc: 'readable transcript' },
-        { kind: 'info', s, label: 'Folder', icon: 'folder', value: shortPath(s.cwd), cmd: 'claudeSessions.openFolder' },
       ];
+      const fu = this.followups()[s.id];
+      kids.push(fu
+        ? { kind: 'action', s, label: `Follow-up ${followups.describeDue(fu.due)}`, icon: 'bell', cmd: 'claudeSessions.setFollowup', desc: fu.note || followups.formatDay(followups.parseDateKey(fu.due)) }
+        : { kind: 'action', s, label: 'Set follow-up…', icon: 'bell', cmd: 'claudeSessions.setFollowup', desc: 'remind me later' });
+      kids.push({ kind: 'info', s, label: 'Folder', icon: 'folder', value: shortPath(s.cwd), cmd: 'claudeSessions.openFolder' });
       if (s.gitBranch) kids.push({ kind: 'info', s, label: 'Branch', icon: 'git-branch', value: s.gitBranch });
       kids.push({ kind: 'info', s, label: 'Session ID', icon: 'key', value: s.id, cmd: 'claudeSessions.copyId' });
       if (d) {
@@ -344,6 +377,24 @@ class SessionsProvider {
       const it = new vscode.TreeItem(this.filter ? `No sessions match "${this.filter}"` : 'No Claude Code sessions found');
       return it;
     }
+    if (el.kind === 'group' && el.special) {
+      const it = new vscode.TreeItem(el.key, vscode.TreeItemCollapsibleState.Expanded);
+      it.id = `group:${el.special}`;
+      if (el.special === 'followups') {
+        const map = this.followups();
+        const due = el.items.filter((s) => followups.isDue(map[s.id])).length;
+        it.description = due ? `${due} due · ${el.items.length} total` : `${el.items.length}`;
+        it.iconPath = new vscode.ThemeIcon(due ? 'bell-dot' : 'bell', due ? new vscode.ThemeColor('charts.orange') : undefined);
+      } else {
+        const st = el.items.map((s) => this.running.get(s.id).status);
+        const waiting = st.filter((x) => x === 'waiting').length;
+        const busy = st.filter((x) => x === 'busy').length;
+        it.description = [waiting && `${waiting} need${waiting === 1 ? 's' : ''} input`, busy && `${busy} working`, `${el.items.length} open`].filter(Boolean).join(' · ');
+        it.iconPath = new vscode.ThemeIcon('pulse', waiting ? new vscode.ThemeColor('charts.orange') : new vscode.ThemeColor('charts.green'));
+      }
+      it.contextValue = `group-${el.special}`;
+      return it;
+    }
     if (el.kind === 'group') {
       const label = el.groupBy === 'folder' ? path.basename(el.key) || el.key : el.key;
       const expand = el.groupBy === 'date' && (el.key === 'Today' || el.key === 'Yesterday' || el.first);
@@ -357,12 +408,25 @@ class SessionsProvider {
     if (el.kind !== 'session') return childItem(el);
     const s = el.s;
     const it = new vscode.TreeItem(s.title, vscode.TreeItemCollapsibleState.Collapsed);
-    it.id = s.id;
-    it.description = el.groupBy === 'folder'
-      ? relTime(s.updated)
-      : `${path.basename(s.cwd)} · ${relTime(s.updated)}`;
-    it.iconPath = new vscode.ThemeIcon('comment-discussion');
-    it.contextValue = 'session';
+    it.id = `${el.groupKey}/${s.id}`; // a session can appear in several groups
+    const run = this.running.get(s.id);
+    const fu = this.followups()[s.id];
+    const parts = [];
+    if (run) parts.push(run.status === 'waiting' && run.waitingFor ? `${running.STATUS_LABEL.waiting}: ${run.waitingFor}` : running.STATUS_LABEL[run.status]);
+    if (fu) parts.push(`⏰ ${followups.describeDue(fu.due)}`);
+    if (el.groupBy !== 'folder' || el.special) parts.push(path.basename(s.cwd));
+    if (!run) parts.push(relTime(s.updated));
+    it.description = parts.join(' · ');
+    if (run) {
+      it.iconPath = run.status === 'busy' ? new vscode.ThemeIcon('sync~spin', new vscode.ThemeColor('charts.blue'))
+        : run.status === 'waiting' ? new vscode.ThemeIcon('bell-dot', new vscode.ThemeColor('charts.orange'))
+          : new vscode.ThemeIcon('circle-filled', new vscode.ThemeColor('charts.green'));
+    } else if (fu) {
+      it.iconPath = new vscode.ThemeIcon(followups.isDue(fu) ? 'bell-dot' : 'bell', followups.isDue(fu) ? new vscode.ThemeColor('charts.orange') : undefined);
+    } else {
+      it.iconPath = new vscode.ThemeIcon('comment-discussion');
+    }
+    it.contextValue = fu ? 'session-fu' : 'session';
 
     const md = new vscode.MarkdownString(undefined, true);
     md.isTrusted = false;
@@ -377,6 +441,8 @@ class SessionsProvider {
     md.appendMarkdown(`$(history) Updated ${s.updated.toLocaleString()} (${relTime(s.updated)})\n\n`);
     md.appendMarkdown(`$(comment) ${s.userMessages} prompts\n\n`);
     md.appendMarkdown(`$(key) \`${s.id}\``);
+    if (run) md.appendMarkdown(`\n\n$(pulse) **${running.STATUS_LABEL[run.status]}**${run.waitingFor ? ` (${mdEscape(run.waitingFor)})` : ''} · process ${run.pid}`);
+    if (fu) md.appendMarkdown(`\n\n$(bell) **Follow-up ${followups.describeDue(fu.due)}** (${followups.formatDay(followups.parseDateKey(fu.due))})${fu.note ? `: ${mdEscape(fu.note)}` : ''}`);
     it.tooltip = md;
     return it;
   }
@@ -464,7 +530,7 @@ function sessionFrom(arg, provider, view) {
 }
 
 function activate(context) {
-  const provider = new SessionsProvider();
+  const provider = new SessionsProvider(context.globalState);
   const view = vscode.window.createTreeView('claudeSessions.list', { treeDataProvider: provider, showCollapseAll: true });
   context.subscriptions.push(view);
 
@@ -489,17 +555,232 @@ function activate(context) {
     provider._em.fire();
   });
 
-  reg('claudeSessions.resume', (arg) => {
-    const s = sessionFrom(arg, provider, view);
-    if (!s) return;
-    if (!fs.existsSync(s.cwd)) {
-      vscode.window.showErrorMessage(`Folder no longer exists: ${s.cwd}`);
+  const launch = (s, { fork = false, cwd } = {}) => {
+    const dir = cwd || s.cwd;
+    if (!fs.existsSync(dir)) {
+      vscode.window.showErrorMessage(`Folder no longer exists: ${dir}`);
       return;
     }
     const bin = vscode.workspace.getConfiguration('claudeSessions').get('claudeCommand', 'claude');
-    const term = vscode.window.createTerminal({ name: `Claude: ${truncate(s.title, 30)}`, cwd: s.cwd, iconPath: new vscode.ThemeIcon('comment-discussion') });
+    const term = vscode.window.createTerminal({
+      name: `${fork ? 'Fork' : 'Claude'}: ${truncate(s.title, 30)}`,
+      cwd: dir,
+      iconPath: new vscode.ThemeIcon(fork ? 'repo-forked' : 'comment-discussion'),
+    });
     term.show();
-    term.sendText(`${bin} --resume ${s.id}`);
+    term.sendText(`${bin} --resume ${s.id}${fork ? ' --fork-session' : ''}`);
+    setTimeout(() => provider.refresh(), 4000);
+  };
+
+  // The VS Code terminal running this Claude process, if any (its shell is the parent process).
+  const findTerminal = async (pid) => {
+    const parent = running.parentPid(pid);
+    for (const t of vscode.window.terminals) {
+      const tp = await t.processId;
+      if (tp && (tp === pid || tp === parent)) return t;
+    }
+    return null;
+  };
+
+  reg('claudeSessions.resume', async (arg) => {
+    const s = sessionFrom(arg, provider, view);
+    if (!s) return;
+    provider.refreshRunning();
+    const run = provider.running.get(s.id);
+    if (run) {
+      const term = await findTerminal(run.pid);
+      const choice = await vscode.window.showWarningMessage(
+        `"${truncate(s.title, 50)}" is already open (${running.STATUS_LABEL[run.status].toLowerCase()}).`,
+        { modal: true, detail: `${term ? 'It is running in a VS Code terminal in this window.' : 'It is running in another terminal or window.'}\n\nResuming the same session twice can mix up the conversation. Fork it instead to continue in a separate copy.` },
+        ...(term ? ['Show Terminal'] : []), 'Fork Instead', 'Resume Anyway');
+      if (choice === 'Show Terminal') { term.show(); return; }
+      if (choice === 'Fork Instead') { launch(s, { fork: true }); return; }
+      if (choice !== 'Resume Anyway') return;
+    }
+    launch(s);
+  });
+
+  reg('claudeSessions.fork', (arg) => {
+    const s = sessionFrom(arg, provider, view);
+    if (s) launch(s, { fork: true });
+  });
+
+  // ---------- follow-ups ----------
+  const setFollowup = async (s, fu) => {
+    const map = { ...provider.followups() };
+    if (fu) map[s.id] = fu; else delete map[s.id];
+    await provider.setFollowups(map);
+    updateStatus();
+  };
+
+  reg('claudeSessions.setFollowup', async (arg) => {
+    const s = sessionFrom(arg, provider, view);
+    if (!s) return;
+    const today = new Date();
+    const existing = provider.followups()[s.id];
+    const opt = (label, d) => ({ label, description: followups.formatDay(d), d });
+    const items = [
+      opt('Tomorrow', followups.addDays(today, 1)),
+      opt('In 2 days', followups.addDays(today, 2)),
+      opt('In 3 days', followups.addDays(today, 3)),
+      opt('Next Monday', followups.nextWeekday(today, 1)),
+      opt('In 1 week', followups.addDays(today, 7)),
+      opt('In 2 weeks', followups.addDays(today, 14)),
+      { label: 'In N days…', custom: 'days' },
+      { label: 'On a date…', custom: 'date' },
+    ];
+    if (existing) items.push({ label: '$(trash) Clear follow-up', clear: true, description: followups.describeDue(existing.due) });
+    const pick = await vscode.window.showQuickPick(items, {
+      title: `Follow up on "${truncate(s.title, 50)}"`,
+      placeHolder: existing ? `Currently ${followups.describeDue(existing.due)}${existing.note ? `: ${existing.note}` : ''}` : 'When should I remind you?',
+    });
+    if (!pick) return;
+    if (pick.clear) { await setFollowup(s, null); return; }
+    let due = pick.d;
+    if (pick.custom === 'days') {
+      const v = await vscode.window.showInputBox({
+        prompt: 'Remind me in how many days?', value: '5',
+        validateInput: (x) => (/^\d{1,3}$/.test(x.trim()) && +x > 0 ? null : 'Enter a number of days, e.g. 5'),
+      });
+      if (!v) return;
+      due = followups.addDays(today, parseInt(v, 10));
+    } else if (pick.custom === 'date') {
+      const v = await vscode.window.showInputBox({
+        prompt: 'Remind me on (YYYY-MM-DD)', value: followups.toDateKey(followups.addDays(today, 1)),
+        validateInput: (x) => {
+          const d = followups.parseDateKey(x);
+          if (!d) return 'Use the format YYYY-MM-DD, e.g. 2026-12-01';
+          return followups.daysUntil(x.trim(), today) < 0 ? 'That date is in the past' : null;
+        },
+      });
+      if (!v) return;
+      due = followups.parseDateKey(v);
+    }
+    const note = await vscode.window.showInputBox({
+      prompt: 'Note for the reminder (optional)',
+      placeHolder: 'e.g. check the deploy, reply to review comments',
+      value: existing ? existing.note : '',
+    });
+    if (note === undefined) return;
+    await setFollowup(s, {
+      due: followups.toDateKey(due),
+      note: note.trim(),
+      title: s.title,
+      cwd: s.cwd,
+      createdAt: new Date().toISOString(),
+      notifiedOn: null,
+    });
+    vscode.window.setStatusBarMessage(`$(bell) Follow-up set: ${followups.describeDue(followups.toDateKey(due))}`, 4000);
+  });
+
+  reg('claudeSessions.clearFollowup', async (arg) => {
+    const s = sessionFrom(arg, provider, view);
+    if (s) await setFollowup(s, null);
+  });
+
+  const statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
+  statusItem.command = 'claudeSessions.showDue';
+  context.subscriptions.push(statusItem);
+  const updateStatus = () => {
+    const map = provider.followups();
+    const due = Object.values(map).filter((f) => followups.isDue(f)).length;
+    const waiting = [...provider.running.values()].filter((r) => r.status === 'waiting').length;
+    const parts = [];
+    if (due) parts.push(`$(bell-dot) ${due} follow-up${due === 1 ? '' : 's'} due`);
+    if (waiting) parts.push(`$(comment-unresolved) ${waiting} need${waiting === 1 ? 's' : ''} input`);
+    if (!parts.length) { statusItem.hide(); return; }
+    statusItem.text = parts.join('  ');
+    statusItem.tooltip = 'Claude Terminal Sessions: click to see what needs attention';
+    statusItem.show();
+  };
+
+  reg('claudeSessions.showDue', async () => {
+    const map = provider.followups();
+    const byId = new Map((provider.sessions.length ? provider.sessions : loadSessions()).map((s) => [s.id, s]));
+    const items = [];
+    for (const [id, r] of provider.running) {
+      if (r.status === 'waiting' && byId.has(id)) items.push({ label: `$(comment-unresolved) ${byId.get(id).title}`, description: `Needs input${r.waitingFor ? `: ${r.waitingFor}` : ''}`, s: byId.get(id) });
+    }
+    for (const [id, f] of followups.sortedFollowups(map)) {
+      const s = byId.get(id) || { id, title: f.title, cwd: f.cwd, created: new Date(), updated: new Date() };
+      items.push({ label: `$(bell) ${s.title}`, description: followups.describeDue(f.due), detail: f.note || undefined, s, fu: true });
+    }
+    if (!items.length) { vscode.window.showInformationMessage('Nothing needs your attention.'); return; }
+    const pick = await vscode.window.showQuickPick(items, { title: 'Needs attention', placeHolder: 'Pick a session to resume' });
+    if (pick) vscode.commands.executeCommand('claudeSessions.resume', { s: pick.s });
+  });
+
+  // Pop up reminders for due follow-ups (once per day per follow-up, across windows).
+  let notifying = false;
+  const notifyDue = async () => {
+    if (notifying) return;
+    notifying = true;
+    try {
+      const todayKey = followups.toDateKey(new Date());
+      for (const [id, f] of followups.toNotify(provider.followups())) {
+        const fresh = { ...provider.followups() };
+        if (!fresh[id] || fresh[id].notifiedOn === todayKey) continue;
+        fresh[id] = { ...fresh[id], notifiedOn: todayKey };
+        await provider.setFollowups(fresh);
+        const s = loadSessions().find((x) => x.id === id) || { id, title: f.title, cwd: f.cwd };
+        vscode.window.showInformationMessage(
+          `⏰ Follow-up ${followups.describeDue(f.due)}: ${truncate(f.title || s.title, 60)}${f.note ? `: ${f.note}` : ''}`,
+          'Resume', 'Snooze 1 Day', 'Done',
+        ).then(async (choice) => {
+          if (choice === 'Resume') vscode.commands.executeCommand('claudeSessions.resume', { s });
+          if (choice === 'Snooze 1 Day') {
+            const m = { ...provider.followups() };
+            if (m[id]) m[id] = { ...m[id], due: followups.toDateKey(followups.addDays(new Date(), 1)), notifiedOn: null };
+            await provider.setFollowups(m);
+            updateStatus();
+          }
+          if (choice === 'Done') await setFollowup({ id }, null);
+        });
+      }
+    } finally {
+      notifying = false;
+      updateStatus();
+    }
+  };
+  setTimeout(notifyDue, 5000);
+  const fuTimer = setInterval(notifyDue, 30 * 60 * 1000);
+  context.subscriptions.push({ dispose: () => clearInterval(fuTimer) });
+
+  // ---------- daily summary ----------
+  reg('claudeSessions.dailySummary', async () => {
+    const R = summary.ranges();
+    const items = [
+      { label: 'Today', r: R.today },
+      { label: 'Yesterday', r: R.yesterday },
+      ...(R.lastWorkday.from.getTime() !== R.yesterday.from.getTime() ? [{ label: 'Last working day', r: R.lastWorkday }] : []),
+      { label: 'This week', r: R.thisWeek },
+      { label: 'Last 7 days', r: R.last7 },
+      { label: 'Pick a date…', pickDate: true },
+    ].map((x) => ({ ...x, description: x.r ? x.r.from.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) : '' }));
+    const pick = await vscode.window.showQuickPick(items, { title: 'Summary of Claude Code work', placeHolder: 'Which period?' });
+    if (!pick) return;
+    let range = pick.r && { ...pick.r };
+    if (pick.pickDate) {
+      const v = await vscode.window.showInputBox({
+        prompt: 'Date (YYYY-MM-DD)', value: followups.toDateKey(R.yesterday.from),
+        validateInput: (x) => (followups.parseDateKey(x) ? null : 'Use the format YYYY-MM-DD'),
+      });
+      if (!v) return;
+      range = { ...summary.dayRange(followups.parseDateKey(v)), label: '' };
+    }
+    const result = await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Window, title: 'Building Claude Code summary…' },
+      async () => {
+        const list = loadSessions().filter((s) => s.updated >= range.from && s.created < range.to);
+        return summary.buildSummary(list.map((s) => ({ s, d: getDetails(s) })), range);
+      });
+    const doc = await vscode.workspace.openTextDocument({ content: result.markdown, language: 'markdown' });
+    await vscode.window.showTextDocument(doc, { preview: false });
+    const next = await vscode.window.showInformationMessage(
+      result.count ? `Summary of ${result.count} session${result.count === 1 ? '' : 's'} ready.` : 'No Claude Code activity in that period.',
+      ...(result.count ? ['Copy to Clipboard', 'Open Preview'] : []));
+    if (next === 'Copy to Clipboard') { await vscode.env.clipboard.writeText(result.markdown); vscode.window.setStatusBarMessage('Summary copied', 3000); }
+    if (next === 'Open Preview') vscode.commands.executeCommand('markdown.showPreview', doc.uri);
   });
   reg('claudeSessions.copyId', async (arg) => {
     const s = sessionFrom(arg, provider, view);
@@ -672,8 +953,20 @@ function activate(context) {
   const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(PROJECTS_DIR), '*/*.jsonl'));
   watcher.onDidCreate(bump); watcher.onDidChange(bump); watcher.onDidDelete(bump);
   context.subscriptions.push(watcher, { dispose: () => clearTimeout(timer) });
+  // Live status: Claude Code rewrites ~/.claude/sessions/<pid>.json when a session starts, stops or changes status.
+  let runTimer;
+  const bumpRunning = () => {
+    clearTimeout(runTimer);
+    runTimer = setTimeout(() => { provider.refreshRunning(); provider._em.fire(); updateStatus(); }, 700);
+  };
+  try {
+    const w = fs.watch(running.SESSIONS_DIR, bumpRunning);
+    context.subscriptions.push({ dispose: () => { w.close(); clearTimeout(runTimer); } });
+  } catch { /* folder may not exist yet; the periodic refresh covers it */ }
+  updateStatus();
+
   // Fallback periodic refresh (watchers outside the workspace can be unreliable) + keeps "x ago" fresh.
-  const iv = setInterval(() => { if (view.visible) provider.refresh(); }, 60000);
+  const iv = setInterval(() => { if (view.visible) provider.refresh(); else { provider.refreshRunning(); updateStatus(); } }, 60000);
   context.subscriptions.push({ dispose: () => clearInterval(iv) });
   context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e) => {
     if (e.affectsConfiguration('claudeSessions')) provider.refresh();

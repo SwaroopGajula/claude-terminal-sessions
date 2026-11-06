@@ -34,11 +34,77 @@ When you use Claude Code across many repos, sessions pile up in different folder
 - **Name** is taken from your `/rename` title, then Claude's automatic title, then your first prompt
 - Hover for details: description (first and last prompt), full folder path, git branch, start and last-active dates, prompt count, session ID
 
+### See which sessions are running
+A **Running** group at the top shows every Claude Code session that is open right now, in any terminal, live:
+
+```
+▾ 〰 Running                    1 needs input · 1 working · 3 open
+    🔔 fix-login-bug             Needs input: input needed · api-server
+    🔄 dark-mode-toggle          Working · my-web-app
+    🟢 update-docs               Open · docs-site
+```
+
+- 🔄 **Working**: Claude is busy · 🔔 **Needs input**: waiting for you (e.g. a permission question) · 🟢 **Open**: idle
+- The status bar shows how many sessions need your input; click it to jump to them
+- Resuming a session that is already open warns you, and offers to **show its terminal** (if it runs in VS Code) or **fork** it instead
+
+### Fork a session
+Right-click → **Fork Session** (or *Fork session* inside an expanded session) starts a new copy of the conversation with the full
+context (`claude --resume <id> --fork-session`). The original is left untouched, which is handy for trying a different approach.
+
+### Follow-up reminders
+For tasks you need to check on again in a few days (waiting for a deploy, a review, a data refresh…):
+
+1. Right-click a session → **Set Follow-up Reminder…**
+2. Choose **Tomorrow**, **In 2 / 3 days**, **Next Monday**, **In 1 / 2 weeks**, **In N days…** or **On a date…** (YYYY-MM-DD)
+3. Add an optional note, e.g. *check the deploy*
+
+Then:
+- A **Follow-ups** group appears at the top, soonest first, with *due tomorrow*, *due today*, *overdue 2 days*
+- On the due date you get a reminder with **Resume**, **Snooze 1 Day** and **Done**
+- The status bar shows how many follow-ups are due; click it to see them
+
+```
+▾ 🔔 Follow-ups                 1 due · 2 total
+    🔔 fix-login-bug             ⏰ due today · api-server
+    🔕 update-docs               ⏰ due in 3 days · docs-site
+```
+
+Reminders appear while VS Code is open; if it was closed on the due date, you get the reminder the next time you open it.
+Follow-ups are stored by the extension (in VS Code's storage), not in Claude Code's files.
+
+### Daily summary
+Click **Daily Summary** (📅) in the toolbar and pick **Today**, **Yesterday**, **Last working day**, **This week**, **Last 7 days**
+or a date. You get a Markdown report, ready for a standup or timesheet, of only the work done in that period:
+
+```markdown
+# Claude Code summary: Yesterday, Thursday, November 5, 2026
+
+_2 sessions · 6 prompts · 4 files changed · 2 commits_
+
+## my-web-app
+### dark-mode-toggle
+Branch `feature/dark-mode` · 10:12 AM – 11:40 AM · 4 prompts
+
+**Asked:**
+- Add a dark mode toggle to the settings page
+- Write tests for the toggle
+**Commits (pushed):**
+- `feat: add dark mode toggle`
+- `test: cover theme toggle`
+**Files changed (3):** `src/components/ThemeToggle.tsx`, `src/styles/theme.css`, `src/components/ThemeToggle.test.tsx`
+```
+
+Commits and pull requests are detected from the git and `gh` commands Claude ran; failed commands are left out.
+Copy it to the clipboard or open the preview from the notification.
+
 ### Expand a session to see its context
 ```
 ▾ dark-mode-toggle                        my-web-app · 2h ago
   ▶ Resume session                        claude --resume 7c3e9a12…
+  ⑂ Fork session                          new branch of this conversation
   📖 Open conversation                    readable transcript
+  🔔 Set follow-up…                       remind me later
   📁 Folder                               ~/projects/my-web-app
   🌿 Branch                               feature/dark-mode
   🔑 Session ID                           7c3e9a12-4f8b-4d21-…
@@ -59,6 +125,8 @@ When you use Claude Code across many repos, sessions pile up in different folder
 | Item | Click | Right-click |
 |---|---|---|
 | **Resume session** | Opens a terminal in the session's folder and runs `claude --resume <id>` | |
+| **Fork session** | Same, with `--fork-session`: a new copy of the conversation | |
+| **Set follow-up…** | Sets or changes a reminder for this session | |
 | **Open conversation** | Opens a readable Markdown copy of the session: prompts, Claude's replies, every tool step | |
 | **Folder** | Opens the folder in a new VS Code window | |
 | **Session ID** | Copies the ID | |
@@ -103,14 +171,15 @@ file contents, environment variables and internal URLs. The extension:
 Automatic detection is not perfect. **Read the file before sharing it**, and only share with people who may see that code and data.
 
 ### Toolbar
+- 📅 **Daily Summary** of your Claude Code work
 - 🔍 **Filter** by title, prompt text, folder, branch or session ID
 - 🌲 **Group by** date or folder
 - 📥 **Import Shared Session** from a `.claude-session.json` file
 - 🔄 **Refresh** (the list also refreshes when sessions change)
 
 ### Session right-click menu
-Resume in terminal · Open conversation · Copy session ID · Copy resume command
-(`cd '<folder>' && claude --resume <id>`) · Open folder in new window · Open raw transcript (`.jsonl`) · Share: Export for Reading · Share: Export to Continue on Another Computer
+Resume in terminal · Fork session · Open conversation · Copy session ID · Copy resume command
+(`cd '<folder>' && claude --resume <id>`) · Open folder in new window · Open raw transcript (`.jsonl`) · Share: Export for Reading · Share: Export to Continue on Another Computer · Set Follow-up Reminder · Clear Follow-up
 
 ## Requirements
 
@@ -132,7 +201,7 @@ Resume in terminal · Open conversation · Copy session ID · Copy resume comman
 **From a `.vsix` file**
 
 ```bash
-code --install-extension claude-terminal-sessions-0.4.0.vsix
+code --install-extension claude-terminal-sessions-0.5.0.vsix
 ```
 
 or in VS Code: **Extensions** panel → `···` menu → **Install from VSIX…**

@@ -1,8 +1,8 @@
 {
   "name": "claude-terminal-sessions",
   "displayName": "Claude Terminal Sessions",
-  "description": "Browse, search and resume your Claude Code terminal sessions from every project folder, right in the VS Code sidebar.",
-  "version": "0.4.0",
+  "description": "Browse, search, resume, fork and share your Claude Code terminal sessions from every folder, see which are running, get daily summaries and follow-up reminders.",
+  "version": "0.5.0",
   "publisher": "SwaroopGajula",
   "license": "MIT",
   "repository": {
@@ -40,7 +40,7 @@
     "onStartupFinished"
   ],
   "scripts": {
-    "lint": "node --check extension.js && node --check share.js",
+    "lint": "node --check extension.js && node --check share.js && node --check running.js && node --check followups.js && node --check summary.js",
     "test": "node --test test/*.test.js",
     "package": "npx --yes @vscode/vsce@4.1.0 package"
   },
@@ -135,6 +135,29 @@
         "command": "claudeSessions.importSession",
         "title": "Import Shared Session…",
         "icon": "$(desktop-download)"
+      },
+      {
+        "command": "claudeSessions.dailySummary",
+        "title": "Daily Summary of Claude Work",
+        "icon": "$(calendar)"
+      },
+      {
+        "command": "claudeSessions.fork",
+        "title": "Fork Session (new copy of the conversation)",
+        "icon": "$(repo-forked)"
+      },
+      {
+        "command": "claudeSessions.setFollowup",
+        "title": "Set Follow-up Reminder…",
+        "icon": "$(bell)"
+      },
+      {
+        "command": "claudeSessions.clearFollowup",
+        "title": "Clear Follow-up"
+      },
+      {
+        "command": "claudeSessions.showDue",
+        "title": "Claude Sessions: Show What Needs Attention"
       }
     ],
     "menus": {
@@ -163,52 +186,57 @@
           "command": "claudeSessions.importSession",
           "when": "view == claudeSessions.list",
           "group": "navigation@2.5"
+        },
+        {
+          "command": "claudeSessions.dailySummary",
+          "when": "view == claudeSessions.list",
+          "group": "navigation@0.5"
         }
       ],
       "view/item/context": [
         {
           "command": "claudeSessions.resume",
-          "when": "viewItem == session",
+          "when": "viewItem =~ /^session(-fu)?$/",
           "group": "inline@1"
         },
         {
           "command": "claudeSessions.openConversation",
-          "when": "viewItem == session",
+          "when": "viewItem =~ /^session(-fu)?$/",
           "group": "inline@1.5"
         },
         {
           "command": "claudeSessions.copyId",
-          "when": "viewItem == session",
+          "when": "viewItem =~ /^session(-fu)?$/",
           "group": "inline@2"
         },
         {
           "command": "claudeSessions.resume",
-          "when": "viewItem == session",
+          "when": "viewItem =~ /^session(-fu)?$/",
           "group": "1_main@1"
         },
         {
           "command": "claudeSessions.copyId",
-          "when": "viewItem == session",
+          "when": "viewItem =~ /^session(-fu)?$/",
           "group": "1_main@2"
         },
         {
           "command": "claudeSessions.copyCommand",
-          "when": "viewItem == session",
+          "when": "viewItem =~ /^session(-fu)?$/",
           "group": "1_main@3"
         },
         {
           "command": "claudeSessions.openFolder",
-          "when": "viewItem == session",
+          "when": "viewItem =~ /^session(-fu)?$/",
           "group": "2_open@1"
         },
         {
           "command": "claudeSessions.openTranscript",
-          "when": "viewItem == session",
+          "when": "viewItem =~ /^session(-fu)?$/",
           "group": "2_open@2"
         },
         {
           "command": "claudeSessions.openConversation",
-          "when": "viewItem == session",
+          "when": "viewItem =~ /^session(-fu)?$/",
           "group": "1_main@1.5"
         },
         {
@@ -228,13 +256,28 @@
         },
         {
           "command": "claudeSessions.exportMarkdown",
-          "when": "viewItem == session",
+          "when": "viewItem =~ /^session(-fu)?$/",
           "group": "3_share@1"
         },
         {
           "command": "claudeSessions.exportSession",
-          "when": "viewItem == session",
+          "when": "viewItem =~ /^session(-fu)?$/",
           "group": "3_share@2"
+        },
+        {
+          "command": "claudeSessions.fork",
+          "when": "viewItem =~ /^session(-fu)?$/",
+          "group": "1_main@1.2"
+        },
+        {
+          "command": "claudeSessions.setFollowup",
+          "when": "viewItem =~ /^session(-fu)?$/",
+          "group": "4_followup@1"
+        },
+        {
+          "command": "claudeSessions.clearFollowup",
+          "when": "viewItem == session-fu",
+          "group": "4_followup@2"
         }
       ],
       "commandPalette": [
@@ -276,6 +319,18 @@
         },
         {
           "command": "claudeSessions.exportSession",
+          "when": "false"
+        },
+        {
+          "command": "claudeSessions.fork",
+          "when": "false"
+        },
+        {
+          "command": "claudeSessions.setFollowup",
+          "when": "false"
+        },
+        {
+          "command": "claudeSessions.clearFollowup",
           "when": "false"
         }
       ]
