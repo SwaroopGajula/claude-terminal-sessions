@@ -639,14 +639,14 @@ function activate(context) {
     let due = pick.d;
     if (pick.custom === 'days') {
       const v = await vscode.window.showInputBox({
-        prompt: 'Remind me in how many days?', value: '5',
+        prompt: 'Remind me in how many days?', value: '5', ignoreFocusOut: true,
         validateInput: (x) => (/^\d{1,3}$/.test(x.trim()) && +x > 0 ? null : 'Enter a number of days, e.g. 5'),
       });
       if (!v) return;
       due = followups.addDays(today, parseInt(v, 10));
     } else if (pick.custom === 'date') {
       const v = await vscode.window.showInputBox({
-        prompt: 'Remind me on (YYYY-MM-DD)', value: followups.toDateKey(followups.addDays(today, 1)),
+        prompt: 'Remind me on (YYYY-MM-DD)', value: followups.toDateKey(followups.addDays(today, 1)), ignoreFocusOut: true,
         validateInput: (x) => {
           const d = followups.parseDateKey(x);
           if (!d) return 'Use the format YYYY-MM-DD, e.g. 2026-12-01';
@@ -656,21 +656,28 @@ function activate(context) {
       if (!v) return;
       due = followups.parseDateKey(v);
     }
+    const dueKey = followups.toDateKey(due);
     const note = await vscode.window.showInputBox({
-      prompt: 'Note for the reminder (optional)',
+      title: `Follow-up on ${followups.formatDay(due)}`,
+      prompt: 'Note for the reminder (optional). Press Enter or Escape to skip.',
       placeHolder: 'e.g. check the deploy, reply to review comments',
       value: existing ? existing.note : '',
+      ignoreFocusOut: true,
     });
-    if (note === undefined) return;
+    // Escape on the optional note keeps the follow-up (without a note) instead of discarding the chosen date.
+    const text = note === undefined ? (existing ? existing.note : '') : note.trim();
     await setFollowup(s, {
-      due: followups.toDateKey(due),
-      note: note.trim(),
+      due: dueKey,
+      note: text,
       title: s.title,
       cwd: s.cwd,
       createdAt: new Date().toISOString(),
       notifiedOn: null,
     });
-    vscode.window.setStatusBarMessage(`$(bell) Follow-up set: ${followups.describeDue(followups.toDateKey(due))}`, 4000);
+    const change = await vscode.window.showInformationMessage(
+      `🔔 Follow-up set for ${followups.formatDay(due)}${followups.daysUntil(dueKey) < 7 ? ` (${followups.describeDue(dueKey)})` : ''}: ${truncate(s.title, 50)}${text ? `: ${text}` : ''}`,
+      'Change');
+    if (change === 'Change') vscode.commands.executeCommand('claudeSessions.setFollowup', { s });
   });
 
   reg('claudeSessions.clearFollowup', async (arg) => {
