@@ -4,7 +4,7 @@
 - **Running sessions.** A live *Running* group shows every open Claude Code session: working, needs input or open. The status bar shows sessions that need your input.
 - Resuming a session that is already open warns you and offers to show its terminal or fork instead.
 - **Fork Session** (`--fork-session`) from the right-click menu or inside an expanded session.
-- **Follow-up reminders.** Set a reminder for tomorrow, in N days, next week or on a date, with a note. A *Follow-ups* group, a status-bar count and a reminder with Resume / Snooze / Done.
+- **Follow-up reminders.** Set a reminder for tomorrow, in N days, next week or on a date, with a note. A *Follow-ups* group, a status-bar count and a reminder with Resume / Snooze / Done. Skipping the note keeps the follow-up, and a confirmation with a Change button is shown.
 - **Daily Summary** toolbar button: a Markdown report of the prompts, commits, pull requests and files changed in a chosen period.
 
 ## 0.4.0

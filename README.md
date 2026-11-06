@@ -55,14 +55,17 @@ context (`claude --resume <id> --fork-session`). The original is left untouched,
 ### Follow-up reminders
 For tasks you need to check on again in a few days (waiting for a deploy, a review, a data refresh…):
 
-1. Right-click a session → **Set Follow-up Reminder…**
+1. Right-click a session → **Set Follow-up Reminder…** (or click **Set follow-up…** inside an expanded session)
 2. Choose **Tomorrow**, **In 2 / 3 days**, **Next Monday**, **In 1 / 2 weeks**, **In N days…** or **On a date…** (YYYY-MM-DD)
-3. Add an optional note, e.g. *check the deploy*
+3. Add an optional note, e.g. *check the deploy*, or press **Enter** / **Escape** to skip it
+4. A confirmation shows the date, with a **Change** button if you picked the wrong one
 
 Then:
 - A **Follow-ups** group appears at the top, soonest first, with *due tomorrow*, *due today*, *overdue 2 days*
 - On the due date you get a reminder with **Resume**, **Snooze 1 Day** and **Done**
 - The status bar shows how many follow-ups are due; click it to see them
+- A session that is also running keeps its running icon (🔄 / 🔔 / 🟢) but still shows *⏰ due …* on its row
+- To change or remove one: right-click → **Set Follow-up Reminder…** (pick a new date or **Clear follow-up**) or **Clear Follow-up**
 
 ```
 ▾ 🔔 Follow-ups                 1 due · 2 total
