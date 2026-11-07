@@ -1,6 +1,9 @@
 // Full-text search inside a session's readable conversation (the Markdown built by parseDetails).
 // Pure (no vscode dependency). Line numbers match the opened conversation document.
 
+// Tool lines are Markdown like **Edit** `path`; show them as plain text.
+const plain = (s) => s.replace(/\*\*|`/g, '');
+
 // Classify each line of the conversation Markdown: prompt, reply, command, file or tool.
 function* classifiedLines(markdown) {
   const lines = String(markdown || '').split('\n');
@@ -9,9 +12,9 @@ function* classifiedLines(markdown) {
     const l = lines[i];
     if (/^## 👤 Prompt \d+/.test(l)) { mode = 'prompt'; continue; }
     if (l === '**🤖 Claude:**') { mode = 'reply'; continue; }
-    if (l.startsWith('- 💻 ')) { yield { line: i, kind: 'command', text: l.slice(5) }; continue; }
-    if (l.startsWith('- ✏️ ')) { yield { line: i, kind: 'file', text: l.slice(l.indexOf(' ') + 1) }; continue; }
-    if (l.startsWith('- 🔧 ')) { yield { line: i, kind: 'tool', text: l.slice(5) }; continue; }
+    if (l.startsWith('- 💻 ')) { yield { line: i, kind: 'command', text: plain(l.replace(/^- 💻 /, '')) }; continue; }
+    if (l.startsWith('- ✏️ ')) { yield { line: i, kind: 'file', text: plain(l.replace(/^- ✏️ /, '')) }; continue; }
+    if (l.startsWith('- 🔧 ')) { yield { line: i, kind: 'tool', text: plain(l.replace(/^- 🔧 /, '')) }; continue; }
     if (mode === 'header' || l === '---' || !l.trim()) continue;
     yield { line: i, kind: mode, text: l };
   }

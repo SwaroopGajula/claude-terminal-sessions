@@ -15,9 +15,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-B24E2C" alt="MIT license"></a>
 </p>
 
-<!-- Demo GIF goes here once recorded:
-<p align="center"><img src="media/demo.gif" width="900" alt="Claude Terminal Sessions demo"></p>
--->
+<p align="center"><img src="media/demo.gif" width="900" alt="Claude Terminal Sessions demo: running sessions, session details, search inside conversations, pin and resume"></p>
 
 ---
 

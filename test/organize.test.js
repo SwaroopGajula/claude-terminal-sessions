@@ -85,6 +85,8 @@ test('searchConversation finds prompts, replies, files and commands with line nu
   const r = search.searchConversation(MD, 'themetoggle');
   assert.deepStrictEqual(r.matches.map((m) => [m.kind, m.line]), [['reply', 14], ['file', 16], ['command', 17]]);
   assert.strictEqual(r.total, 3);
+  assert.strictEqual(r.matches[1].snippet, 'Write ~/projects/my-web-app/src/ThemeToggle.tsx');
+  assert.strictEqual(r.matches[2].snippet, 'npm test -- ThemeToggle — Run the toggle tests');
   assert.deepStrictEqual(search.searchConversation(MD, 'remember choice').matches.map((m) => [m.kind, m.line]), [['prompt', 10]]);
   assert.strictEqual(search.searchConversation(MD, 'my-web-app').matches.some((m) => m.line === 2), false); // header skipped
   assert.strictEqual(search.searchConversation(MD, '').total, 0);
