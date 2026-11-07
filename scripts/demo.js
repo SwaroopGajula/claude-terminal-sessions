@@ -116,11 +116,33 @@ for (const [i, status, waitingFor] of [[1, 'waiting', 'permission to run npm run
   fs.writeFileSync(path.join(sessionsDir, `${p.pid}.json`), JSON.stringify({ pid: p.pid, sessionId: ids[i], cwd, status, waitingFor, updatedAt: now }));
 }
 
+// Stand-in for `claude` in the demo window: the real Claude Code would show your account and organization
+// on its start screen, so Resume and Fork only print what they would do.
+const fakeClaude = path.join(ROOT, 'claude-demo-stand-in');
+fs.writeFileSync(fakeClaude, `#!/bin/sh
+echo
+echo "  [demo] Claude Code would now continue this session:"
+echo "         claude $*"
+echo "         in $(basename "$PWD")"
+echo
+`, { mode: 0o755 });
+
 // Isolated VS Code: its own settings and extensions, so your normal setup is untouched.
 const userDir = path.join(ROOT, 'vscode-user');
 const extDir = path.join(ROOT, 'vscode-extensions');
 fs.mkdirSync(path.join(userDir, 'User'), { recursive: true });
 fs.writeFileSync(path.join(userDir, 'User', 'settings.json'), JSON.stringify({
+  'claudeSessions.claudeCommand': fakeClaude,
+  // Plain terminal without your shell config: the prompt shows only the folder, never the user or computer name.
+  'terminal.integrated.profiles.osx': {
+    demo: { path: '/bin/bash', args: ['--noprofile', '--norc'], env: { PS1: '\\W $ ', BASH_SILENCE_DEPRECATION_WARNING: '1' } },
+  },
+  'terminal.integrated.defaultProfile.osx': 'demo',
+  'terminal.integrated.profiles.linux': {
+    demo: { path: '/bin/bash', args: ['--noprofile', '--norc'], env: { PS1: '\\W $ ' } },
+  },
+  'terminal.integrated.defaultProfile.linux': 'demo',
+  'window.title': '${rootName}',
   'workbench.startupEditor': 'none',
   'workbench.tips.enabled': false,
   'security.workspace.trust.enabled': false,
