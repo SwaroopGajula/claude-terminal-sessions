@@ -1,8 +1,8 @@
 {
   "name": "claude-terminal-sessions",
   "displayName": "Claude Terminal Sessions",
-  "description": "Browse, search, resume, fork and share your Claude Code terminal sessions from every folder, see which are running, get daily summaries and follow-up reminders.",
-  "version": "0.5.0",
+  "description": "Browse, search, resume, fork and share your Claude Code terminal sessions from every folder: search inside conversations, pin, label, archive, follow-up reminders and daily summaries.",
+  "version": "0.6.0",
   "publisher": "SwaroopGajula",
   "license": "MIT",
   "repository": {
@@ -40,7 +40,7 @@
     "onStartupFinished"
   ],
   "scripts": {
-    "lint": "node --check extension.js && node --check share.js && node --check running.js && node --check followups.js && node --check summary.js",
+    "lint": "node --check extension.js && node --check share.js && node --check running.js && node --check followups.js && node --check summary.js && node --check marks.js && node --check search.js",
     "test": "node --test test/*.test.js",
     "package": "npx --yes @vscode/vsce@4.1.0 package"
   },
@@ -133,7 +133,7 @@
       },
       {
         "command": "claudeSessions.importSession",
-        "title": "Import Shared Session…",
+        "title": "Import Shared Session\u2026",
         "icon": "$(desktop-download)"
       },
       {
@@ -148,7 +148,7 @@
       },
       {
         "command": "claudeSessions.setFollowup",
-        "title": "Set Follow-up Reminder…",
+        "title": "Set Follow-up Reminder\u2026",
         "icon": "$(bell)"
       },
       {
@@ -158,6 +158,60 @@
       {
         "command": "claudeSessions.showDue",
         "title": "Claude Sessions: Show What Needs Attention"
+      },
+      {
+        "command": "claudeSessions.searchConversations",
+        "title": "Search Inside Conversations\u2026",
+        "icon": "$(search-fuzzy)"
+      },
+      {
+        "command": "claudeSessions.pin",
+        "title": "Pin to Top",
+        "icon": "$(pin)"
+      },
+      {
+        "command": "claudeSessions.unpin",
+        "title": "Unpin",
+        "icon": "$(pinned)"
+      },
+      {
+        "command": "claudeSessions.editNote",
+        "title": "Edit Note\u2026",
+        "icon": "$(note)"
+      },
+      {
+        "command": "claudeSessions.setLabels",
+        "title": "Set Labels\u2026",
+        "icon": "$(tag)"
+      },
+      {
+        "command": "claudeSessions.filterByLabel",
+        "title": "Filter by Label\u2026",
+        "icon": "$(tag)"
+      },
+      {
+        "command": "claudeSessions.archive",
+        "title": "Archive (hide from list)",
+        "icon": "$(archive)"
+      },
+      {
+        "command": "claudeSessions.unarchive",
+        "title": "Unarchive"
+      },
+      {
+        "command": "claudeSessions.showArchived",
+        "title": "Show Archived Sessions",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "claudeSessions.hideArchived",
+        "title": "Hide Archived Sessions",
+        "icon": "$(eye-closed)"
+      },
+      {
+        "command": "claudeSessions.delete",
+        "title": "Delete Session (move to Trash)\u2026",
+        "icon": "$(trash)"
       }
     ],
     "menus": {
@@ -191,52 +245,72 @@
           "command": "claudeSessions.dailySummary",
           "when": "view == claudeSessions.list",
           "group": "navigation@0.5"
+        },
+        {
+          "command": "claudeSessions.searchConversations",
+          "when": "view == claudeSessions.list",
+          "group": "navigation@1.5"
+        },
+        {
+          "command": "claudeSessions.filterByLabel",
+          "when": "view == claudeSessions.list",
+          "group": "1_filter@1"
+        },
+        {
+          "command": "claudeSessions.showArchived",
+          "when": "view == claudeSessions.list && !claudeSessions.showArchived",
+          "group": "1_filter@2"
+        },
+        {
+          "command": "claudeSessions.hideArchived",
+          "when": "view == claudeSessions.list && claudeSessions.showArchived",
+          "group": "1_filter@2"
         }
       ],
       "view/item/context": [
         {
           "command": "claudeSessions.resume",
-          "when": "viewItem =~ /^session(-fu)?$/",
+          "when": "viewItem =~ /^session( |$)/",
           "group": "inline@1"
         },
         {
           "command": "claudeSessions.openConversation",
-          "when": "viewItem =~ /^session(-fu)?$/",
+          "when": "viewItem =~ /^session( |$)/",
           "group": "inline@1.5"
         },
         {
           "command": "claudeSessions.copyId",
-          "when": "viewItem =~ /^session(-fu)?$/",
+          "when": "viewItem =~ /^session( |$)/",
           "group": "inline@2"
         },
         {
           "command": "claudeSessions.resume",
-          "when": "viewItem =~ /^session(-fu)?$/",
+          "when": "viewItem =~ /^session( |$)/",
           "group": "1_main@1"
         },
         {
           "command": "claudeSessions.copyId",
-          "when": "viewItem =~ /^session(-fu)?$/",
+          "when": "viewItem =~ /^session( |$)/",
           "group": "1_main@2"
         },
         {
           "command": "claudeSessions.copyCommand",
-          "when": "viewItem =~ /^session(-fu)?$/",
+          "when": "viewItem =~ /^session( |$)/",
           "group": "1_main@3"
         },
         {
           "command": "claudeSessions.openFolder",
-          "when": "viewItem =~ /^session(-fu)?$/",
+          "when": "viewItem =~ /^session( |$)/",
           "group": "2_open@1"
         },
         {
           "command": "claudeSessions.openTranscript",
-          "when": "viewItem =~ /^session(-fu)?$/",
+          "when": "viewItem =~ /^session( |$)/",
           "group": "2_open@2"
         },
         {
           "command": "claudeSessions.openConversation",
-          "when": "viewItem =~ /^session(-fu)?$/",
+          "when": "viewItem =~ /^session( |$)/",
           "group": "1_main@1.5"
         },
         {
@@ -256,28 +330,63 @@
         },
         {
           "command": "claudeSessions.exportMarkdown",
-          "when": "viewItem =~ /^session(-fu)?$/",
+          "when": "viewItem =~ /^session( |$)/",
           "group": "3_share@1"
         },
         {
           "command": "claudeSessions.exportSession",
-          "when": "viewItem =~ /^session(-fu)?$/",
+          "when": "viewItem =~ /^session( |$)/",
           "group": "3_share@2"
         },
         {
           "command": "claudeSessions.fork",
-          "when": "viewItem =~ /^session(-fu)?$/",
+          "when": "viewItem =~ /^session( |$)/",
           "group": "1_main@1.2"
         },
         {
           "command": "claudeSessions.setFollowup",
-          "when": "viewItem =~ /^session(-fu)?$/",
+          "when": "viewItem =~ /^session( |$)/",
           "group": "4_followup@1"
         },
         {
           "command": "claudeSessions.clearFollowup",
-          "when": "viewItem == session-fu",
+          "when": "viewItem =~ /^session .*\\bfu\\b/",
           "group": "4_followup@2"
+        },
+        {
+          "command": "claudeSessions.pin",
+          "when": "viewItem =~ /^session( |$)/ && viewItem =~ /^(?!.*\\bpinned\\b)/",
+          "group": "5_organize@1"
+        },
+        {
+          "command": "claudeSessions.unpin",
+          "when": "viewItem =~ /^session .*\\bpinned\\b/",
+          "group": "5_organize@1"
+        },
+        {
+          "command": "claudeSessions.editNote",
+          "when": "viewItem =~ /^session( |$)/",
+          "group": "5_organize@2"
+        },
+        {
+          "command": "claudeSessions.setLabels",
+          "when": "viewItem =~ /^session( |$)/",
+          "group": "5_organize@3"
+        },
+        {
+          "command": "claudeSessions.archive",
+          "when": "viewItem =~ /^session( |$)/ && viewItem =~ /^(?!.*\\barchived\\b)/",
+          "group": "6_archive@1"
+        },
+        {
+          "command": "claudeSessions.unarchive",
+          "when": "viewItem =~ /^session .*\\barchived\\b/",
+          "group": "6_archive@1"
+        },
+        {
+          "command": "claudeSessions.delete",
+          "when": "viewItem =~ /^session( |$)/",
+          "group": "6_archive@2"
         }
       ],
       "commandPalette": [
@@ -332,6 +441,34 @@
         {
           "command": "claudeSessions.clearFollowup",
           "when": "false"
+        },
+        {
+          "command": "claudeSessions.pin",
+          "when": "false"
+        },
+        {
+          "command": "claudeSessions.unpin",
+          "when": "false"
+        },
+        {
+          "command": "claudeSessions.editNote",
+          "when": "false"
+        },
+        {
+          "command": "claudeSessions.setLabels",
+          "when": "false"
+        },
+        {
+          "command": "claudeSessions.archive",
+          "when": "false"
+        },
+        {
+          "command": "claudeSessions.unarchive",
+          "when": "false"
+        },
+        {
+          "command": "claudeSessions.delete",
+          "when": "false"
         }
       ]
     },
@@ -356,6 +493,12 @@
           "type": "number",
           "default": 300,
           "description": "Maximum number of sessions to show (most recent first)."
+        },
+        "claudeSessions.autoArchiveDays": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "description": "Automatically archive (hide) sessions not used for this many days. Pinned sessions and sessions with a follow-up are never auto-archived. 0 turns this off."
         }
       }
     }

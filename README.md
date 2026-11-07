@@ -34,6 +34,61 @@ When you use Claude Code across many repos, sessions pile up in different folder
 - **Name** is taken from your `/rename` title, then Claude's automatic title, then your first prompt
 - Hover for details: description (first and last prompt), full folder path, git branch, start and last-active dates, prompt count, session ID
 
+### Search inside conversations
+Click **Search Inside Conversations** (the fuzzy-search icon) in the toolbar and type what you are looking for, for example
+`ThemeToggle.tsx`, `npm test` or `migration`. It searches every session's prompts, Claude's replies, the commands Claude ran
+and the files it changed. All words must appear on the same line, in any order; case does not matter.
+
+```
+"ThemeToggle": 7 matches in 2 sessions
+  ⊟ Show the 2 matching sessions in the sidebar
+  ── dark-mode-toggle · my-web-app ─────────────────
+  ✏️ **Write** `~/projects/my-web-app/src/ThemeToggle.tsx`     File changed
+  ✨ I will add a ThemeToggle component and store the…          Claude
+  💻 `npm test -- ThemeToggle` — Run the toggle tests          Command
+  ── settings-page-redesign · my-web-app ───────────
+  👤 Move the ThemeToggle into the new settings panel          Your prompt
+```
+
+- Pick a match to open that conversation **at that exact line**
+- Or pick **Show the matching sessions in the sidebar** to filter the list to them. Click **Clear Filter** to go back.
+- Handy for questions like *"which session touched `ThemeToggle.tsx`?"* or *"where did I run that migration?"*
+
+The 🔍 **Filter** button is the quick version: it only looks at titles, prompts, folders, branches, session IDs, notes and labels.
+
+### Pin, notes and labels
+Right-click a session (or click the rows inside an expanded session):
+
+- **Pin to Top**: the session also appears in a 📌 **Pinned** group at the top of the list. **Unpin** removes it.
+- **Edit Note…**: a line of your own, e.g. *step 2 of 4 done, next: tests*. It shows on the row (📝) and on hover. Clear the text to remove it.
+- **Set Labels…**: tags like `#bug`, `#feature` or `#research`. Check existing labels, or type a new one and press **Enter**.
+  Labels show on the row.
+
+```
+▾ 📌 Pinned                     1
+    📌 dark-mode-toggle          #feature · my-web-app · 2h ago · 📝 step 2 of 4 done
+▾ 📅 Today                      3
+    💬 fix-login-redirect        #bug · api-server · 20m ago
+```
+
+To see one label only: **⋯** menu in the toolbar → **Filter by Label…**, or type `#bug` in the 🔍 filter
+(you can combine it with words, e.g. `#bug login`).
+
+Select several sessions (**Cmd/Ctrl+click** or **Shift+click**) to pin, label, archive or delete them together.
+
+### Archive or delete finished sessions
+- **Archive (hide from list)**: hides the session so the list only shows active work. Nothing is deleted, and an **Undo** button appears.
+  If you resume an archived session it comes back automatically.
+- **⋯** menu → **Show Archived Sessions**: shows an **Archived** group at the bottom, where you can **Unarchive**.
+  Filters and searches always include archived sessions.
+- **Auto-archive**: set `claudeSessions.autoArchiveDays` (e.g. `30`) to hide sessions you have not used for that many days.
+  Pinned sessions and sessions with a follow-up are never auto-archived.
+- **Delete Session (move to Trash)…**: removes the session for good. After a confirmation, the conversation file and its
+  side files (subagent transcripts, file backups used by `/rewind`) go to the **Trash**, so you can still restore them from there.
+  A session that is open in a terminal cannot be deleted until you exit Claude there.
+
+Pins, notes, labels and archive state are stored by the extension (in VS Code's storage), not in Claude Code's files.
+
 ### See which sessions are running
 A **Running** group at the top shows every Claude Code session that is open right now, in any terminal, live:
 
@@ -108,6 +163,8 @@ Copy it to the clipboard or open the preview from the notification.
   ⑂ Fork session                          new branch of this conversation
   📖 Open conversation                    readable transcript
   🔔 Set follow-up…                       remind me later
+  📝 Note                                 step 2 of 4 done, next: tests
+  🏷 Labels                               #feature
   📁 Folder                               ~/projects/my-web-app
   🌿 Branch                               feature/dark-mode
   🔑 Session ID                           7c3e9a12-4f8b-4d21-…
@@ -130,6 +187,8 @@ Copy it to the clipboard or open the preview from the notification.
 | **Resume session** | Opens a terminal in the session's folder and runs `claude --resume <id>` | |
 | **Fork session** | Same, with `--fork-session`: a new copy of the conversation | |
 | **Set follow-up…** | Sets or changes a reminder for this session | |
+| **Note** / **Add note…** | Edits your note for this session | |
+| **Labels** / **Add labels…** | Edits the session's labels | |
 | **Open conversation** | Opens a readable Markdown copy of the session: prompts, Claude's replies, every tool step | |
 | **Folder** | Opens the folder in a new VS Code window | |
 | **Session ID** | Copies the ID | |
@@ -175,14 +234,16 @@ Automatic detection is not perfect. **Read the file before sharing it**, and onl
 
 ### Toolbar
 - 📅 **Daily Summary** of your Claude Code work
-- 🔍 **Filter** by title, prompt text, folder, branch or session ID
+- 🔍 **Filter** by title, prompt text, folder, branch, session ID, note or `#label`
+- 🔎 **Search Inside Conversations**: prompts, replies, commands and changed files
 - 🌲 **Group by** date or folder
 - 📥 **Import Shared Session** from a `.claude-session.json` file
 - 🔄 **Refresh** (the list also refreshes when sessions change)
+- **⋯** menu: **Filter by Label…** · **Show / Hide Archived Sessions**
 
 ### Session right-click menu
 Resume in terminal · Fork session · Open conversation · Copy session ID · Copy resume command
-(`cd '<folder>' && claude --resume <id>`) · Open folder in new window · Open raw transcript (`.jsonl`) · Share: Export for Reading · Share: Export to Continue on Another Computer · Set Follow-up Reminder · Clear Follow-up
+(`cd '<folder>' && claude --resume <id>`) · Open folder in new window · Open raw transcript (`.jsonl`) · Share: Export for Reading · Share: Export to Continue on Another Computer · Set Follow-up Reminder · Clear Follow-up · Pin to Top / Unpin · Edit Note · Set Labels · Archive / Unarchive · Delete Session (move to Trash)
 
 ## Requirements
 
@@ -204,7 +265,7 @@ Resume in terminal · Fork session · Open conversation · Copy session ID · Co
 **From a `.vsix` file**
 
 ```bash
-code --install-extension claude-terminal-sessions-0.5.0.vsix
+code --install-extension claude-terminal-sessions-0.6.0.vsix
 ```
 
 or in VS Code: **Extensions** panel → `···` menu → **Install from VSIX…**
@@ -218,12 +279,14 @@ Then click the **Claude Terminal Sessions** icon in the activity bar.
 | `claudeSessions.claudeCommand` | `claude` | Command used to launch Claude Code (e.g. a full path or an alias) |
 | `claudeSessions.groupBy` | `date` | Group sessions by `date` or `folder` |
 | `claudeSessions.maxSessions` | `300` | Maximum number of sessions to show |
+| `claudeSessions.autoArchiveDays` | `0` | Hide sessions not used for this many days (`0` = off). Pinned and followed-up sessions are kept |
 
 ## Privacy
 
-Everything stays on your machine. The extension only **reads** the session files in `~/.claude/projects`.
-It never changes them and never sends anything over the network. Each user sees only their own sessions.
+Everything stays on your machine. The extension **reads** the session files in `~/.claude/projects` and never
+changes their contents or sends anything over the network. Each user sees only their own sessions.
 Exports are only written where you choose to save them, and importing only adds a new session file under `~/.claude/projects`.
+**Delete Session** is the only action that removes Claude Code files, always after a confirmation, and it moves them to the Trash.
 
 ## Development
 
@@ -231,12 +294,12 @@ Exports are only written where you choose to save them, and importing only adds 
 git clone https://github.com/SwaroopGajula/claude-terminal-sessions.git
 cd claude-terminal-sessions
 npm run lint      # syntax check
-npm test          # unit tests (secret removal, import rewriting)
+npm test          # unit tests (secret removal, import, reminders, summary, labels, search)
 npm run package   # builds claude-terminal-sessions-<version>.vsix
 code --install-extension claude-terminal-sessions-*.vsix
 ```
 
-There is no build step and there are no runtime dependencies: `extension.js` (UI) and `share.js` (export/import logic) are plain JavaScript.
+There is no build step and there are no runtime dependencies. `extension.js` is the UI; the logic lives in plain JavaScript modules that are tested without VS Code: `share.js` (export/import), `running.js`, `followups.js`, `summary.js`, `marks.js` (pins, notes, labels, archive) and `search.js`.
 
 ### Automatic builds and releases (GitHub Actions)
 - **CI** (`.github/workflows/ci.yml`): every push to `main` and every pull request runs the checks and tests and builds the `.vsix`.

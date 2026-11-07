@@ -7,6 +7,8 @@ const share = require('./share');
 const running = require('./running');
 const followups = require('./followups');
 const summary = require('./summary');
+const marks = require('./marks');
+const search = require('./search');
 
 const PROJECTS_DIR = path.join(os.homedir(), '.claude', 'projects');
 const cache = new Map(); // file -> { mtimeMs, size, session }
@@ -121,7 +123,8 @@ function parseDetails(s) {
   const cmdById = new Map(); // tool_use id -> command (to mark failures)
   const seen = new Set();
   const md = [];
-  const push = (str) => { md.push(str); return md.length - 1; };
+  let lineNo = 0; // document line of the next entry (entries can span several lines)
+  const push = (str) => { const at = lineNo; md.push(str); lineNo += String(str).split('\n').length; return at; };
 
   push(`# ${s.title}`);
   push('');
@@ -298,12 +301,15 @@ function mdEscape(s) {
 // ---------- tree ----------
 
 const FOLLOWUPS_KEY = 'claudeSessions.followups';
+const MARKS_KEY = 'claudeSessions.marks';
+const SHOW_ARCHIVED_KEY = 'claudeSessions.showArchived';
 
 class SessionsProvider {
   constructor(state) {
     this._em = new vscode.EventEmitter();
     this.onDidChangeTreeData = this._em.event;
     this.filter = '';
+    this.contentFilter = null; // { query, ids: Set } from "Search Inside Conversations"
     this.sessions = [];
     this.state = state; // vscode Memento (globalState) for follow-ups
     this.running = new Map();
@@ -313,16 +319,31 @@ class SessionsProvider {
   refreshRunning() { this.running = running.readRunning(); }
   followups() { return (this.state && this.state.get(FOLLOWUPS_KEY)) || {}; }
   async setFollowups(map) { await this.state.update(FOLLOWUPS_KEY, map); this._em.fire(); }
+  marks() { return (this.state && this.state.get(MARKS_KEY)) || {}; }
+  async setMarks(map) { await this.state.update(MARKS_KEY, map); this._em.fire(); }
+  get showArchived() { return !!(this.state && this.state.get(SHOW_ARCHIVED_KEY)); }
+  get filtering() { return !!(this.filter || this.contentFilter); }
+  isArchived(s) {
+    const autoDays = vscode.workspace.getConfiguration('claudeSessions').get('autoArchiveDays', 0);
+    return marks.isArchived(s, this.marks()[s.id], { autoDays, hasFollowup: !!this.followups()[s.id] });
+  }
 
-  getSessions() {
+  allSessions() {
     if (!this.sessions.length) {
       const max = vscode.workspace.getConfiguration('claudeSessions').get('maxSessions', 300);
       this.sessions = loadSessions().slice(0, max);
     }
-    if (!this.filter) return this.sessions;
-    const q = this.filter.toLowerCase();
-    return this.sessions.filter((s) =>
-      [s.title, s.firstPrompt, s.lastPrompt, s.cwd, s.id, s.gitBranch].some((v) => v && v.toLowerCase().includes(q)));
+    return this.sessions;
+  }
+
+  getSessions() {
+    let list = this.allSessions();
+    if (this.contentFilter) list = list.filter((s) => this.contentFilter.ids.has(s.id));
+    if (this.filter) {
+      const mk = this.marks();
+      list = list.filter((s) => marks.matchesFilter(s, mk[s.id], this.filter));
+    }
+    return list;
   }
 
   getChildren(el) {
@@ -331,6 +352,11 @@ class SessionsProvider {
       const list = this.getSessions();
       if (!list.length) return [{ kind: 'empty' }];
       const roots = [];
+      const mk = this.marks();
+      const active = list.filter((s) => !this.isArchived(s));
+      const archived = list.filter((s) => this.isArchived(s));
+      const pinned = active.filter((s) => mk[s.id] && mk[s.id].pinned);
+      if (pinned.length) roots.push({ kind: 'group', key: 'Pinned', special: 'pinned', items: pinned, groupBy });
       const byId = new Map(list.map((s) => [s.id, s]));
       const fu = followups.sortedFollowups(this.followups()).filter(([id]) => byId.has(id));
       if (fu.length) roots.push({ kind: 'group', key: 'Follow-ups', special: 'followups', items: fu.map(([id]) => byId.get(id)), groupBy });
@@ -338,12 +364,14 @@ class SessionsProvider {
         .sort((a, b) => running.rank(this.running.get(b.id)) - running.rank(this.running.get(a.id)) || b.updated - a.updated);
       if (run.length) roots.push({ kind: 'group', key: 'Running', special: 'running', items: run, groupBy });
       const groups = new Map();
-      for (const s of list) {
+      for (const s of active) {
         const key = groupBy === 'folder' ? s.cwd : dateBucket(s.updated);
         if (!groups.has(key)) groups.set(key, []);
         groups.get(key).push(s);
       }
-      return roots.concat([...groups.entries()].map(([key, items], i) => ({ kind: 'group', key, items, groupBy, first: i === 0 })));
+      const all = roots.concat([...groups.entries()].map(([key, items], i) => ({ kind: 'group', key, items, groupBy, first: i === 0 })));
+      if (archived.length && (this.showArchived || this.filtering)) all.push({ kind: 'group', key: 'Archived', special: 'archived', items: archived, groupBy });
+      return all.length ? all : [{ kind: 'empty', archivedOnly: archived.length }];
     }
     if (el.kind === 'group') return el.items.map((s) => ({ kind: 'session', s, groupBy, groupKey: el.key, special: el.special }));
     const s = el.s;
@@ -355,9 +383,16 @@ class SessionsProvider {
         { kind: 'action', s, label: 'Open conversation', icon: 'book', cmd: 'claudeSessions.openConversation', desc: 'readable transcript' },
       ];
       const fu = this.followups()[s.id];
+      const m = this.marks()[s.id] || {};
       kids.push(fu
         ? { kind: 'action', s, label: `Follow-up ${followups.describeDue(fu.due)}`, icon: 'bell', cmd: 'claudeSessions.setFollowup', desc: fu.note || followups.formatDay(followups.parseDateKey(fu.due)) }
         : { kind: 'action', s, label: 'Set follow-up…', icon: 'bell', cmd: 'claudeSessions.setFollowup', desc: 'remind me later' });
+      kids.push(m.note
+        ? { kind: 'action', s, label: 'Note', icon: 'note', cmd: 'claudeSessions.editNote', desc: m.note }
+        : { kind: 'action', s, label: 'Add note…', icon: 'note', cmd: 'claudeSessions.editNote', desc: 'your own reminder text' });
+      kids.push(m.labels
+        ? { kind: 'action', s, label: 'Labels', icon: 'tag', cmd: 'claudeSessions.setLabels', desc: m.labels.map((l) => `#${l}`).join(' ') }
+        : { kind: 'action', s, label: 'Add labels…', icon: 'tag', cmd: 'claudeSessions.setLabels', desc: 'e.g. #bug #feature' });
       kids.push({ kind: 'info', s, label: 'Folder', icon: 'folder', value: shortPath(s.cwd), cmd: 'claudeSessions.openFolder' });
       if (s.gitBranch) kids.push({ kind: 'info', s, label: 'Branch', icon: 'git-branch', value: s.gitBranch });
       kids.push({ kind: 'info', s, label: 'Session ID', icon: 'key', value: s.id, cmd: 'claudeSessions.copyId' });
@@ -374,13 +409,21 @@ class SessionsProvider {
 
   getTreeItem(el) {
     if (el.kind === 'empty') {
-      const it = new vscode.TreeItem(this.filter ? `No sessions match "${this.filter}"` : 'No Claude Code sessions found');
-      return it;
+      if (el.archivedOnly) return new vscode.TreeItem(`All ${el.archivedOnly} sessions are archived (use Show Archived)`);
+      return new vscode.TreeItem(this.filter ? `No sessions match "${this.filter}"`
+        : this.contentFilter ? `No conversations contain "${this.contentFilter.query}"` : 'No Claude Code sessions found');
     }
     if (el.kind === 'group' && el.special) {
-      const it = new vscode.TreeItem(el.key, vscode.TreeItemCollapsibleState.Expanded);
+      const collapsed = el.special === 'archived' && !this.filtering;
+      const it = new vscode.TreeItem(el.key, collapsed ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.Expanded);
       it.id = `group:${el.special}`;
-      if (el.special === 'followups') {
+      if (el.special === 'pinned') {
+        it.description = `${el.items.length}`;
+        it.iconPath = new vscode.ThemeIcon('pinned');
+      } else if (el.special === 'archived') {
+        it.description = `${el.items.length} · hidden from the list`;
+        it.iconPath = new vscode.ThemeIcon('archive');
+      } else if (el.special === 'followups') {
         const map = this.followups();
         const due = el.items.filter((s) => followups.isDue(map[s.id])).length;
         it.description = due ? `${due} due · ${el.items.length} total` : `${el.items.length}`;
@@ -411,11 +454,15 @@ class SessionsProvider {
     it.id = `${el.groupKey}/${s.id}`; // a session can appear in several groups
     const run = this.running.get(s.id);
     const fu = this.followups()[s.id];
+    const m = this.marks()[s.id] || {};
+    const archived = this.isArchived(s);
     const parts = [];
+    if (m.labels) parts.push(m.labels.map((l) => `#${l}`).join(' '));
     if (run) parts.push(run.status === 'waiting' && run.waitingFor ? `${running.STATUS_LABEL.waiting}: ${run.waitingFor}` : running.STATUS_LABEL[run.status]);
     if (fu) parts.push(`⏰ ${followups.describeDue(fu.due)}`);
     if (el.groupBy !== 'folder' || el.special) parts.push(path.basename(s.cwd));
     if (!run) parts.push(relTime(s.updated));
+    if (m.note) parts.push(`📝 ${truncate(m.note, 40)}`);
     it.description = parts.join(' · ');
     if (run) {
       it.iconPath = run.status === 'busy' ? new vscode.ThemeIcon('sync~spin', new vscode.ThemeColor('charts.blue'))
@@ -423,10 +470,15 @@ class SessionsProvider {
           : new vscode.ThemeIcon('circle-filled', new vscode.ThemeColor('charts.green'));
     } else if (fu) {
       it.iconPath = new vscode.ThemeIcon(followups.isDue(fu) ? 'bell-dot' : 'bell', followups.isDue(fu) ? new vscode.ThemeColor('charts.orange') : undefined);
+    } else if (archived) {
+      it.iconPath = new vscode.ThemeIcon('archive', new vscode.ThemeColor('disabledForeground'));
+    } else if (m.pinned) {
+      it.iconPath = new vscode.ThemeIcon('pinned');
     } else {
       it.iconPath = new vscode.ThemeIcon('comment-discussion');
     }
-    it.contextValue = fu ? 'session-fu' : 'session';
+    // "session" plus flags; menus match with regexes such as /^session( |$)/ and / pinned( |$)/
+    it.contextValue = ['session', fu && 'fu', m.pinned && 'pinned', archived && 'archived', m.labels && 'labeled', m.note && 'noted'].filter(Boolean).join(' ');
 
     const md = new vscode.MarkdownString(undefined, true);
     md.isTrusted = false;
@@ -442,6 +494,10 @@ class SessionsProvider {
     md.appendMarkdown(`$(comment) ${s.userMessages} prompts\n\n`);
     md.appendMarkdown(`$(key) \`${s.id}\``);
     if (run) md.appendMarkdown(`\n\n$(pulse) **${running.STATUS_LABEL[run.status]}**${run.waitingFor ? ` (${mdEscape(run.waitingFor)})` : ''} · process ${run.pid}`);
+    if (m.pinned) md.appendMarkdown('\n\n$(pinned) Pinned');
+    if (archived) md.appendMarkdown(`\n\n$(archive) Archived${m.archivedAt ? ` on ${new Date(m.archivedAt).toLocaleDateString()}` : ' automatically (idle)'}`);
+    if (m.labels) md.appendMarkdown(`\n\n$(tag) ${m.labels.map((l) => `\`#${l}\``).join(' ')}`);
+    if (m.note) md.appendMarkdown(`\n\n$(note) ${mdEscape(m.note)}`);
     if (fu) md.appendMarkdown(`\n\n$(bell) **Follow-up ${followups.describeDue(fu.due)}** (${followups.formatDay(followups.parseDateKey(fu.due))})${fu.note ? `: ${mdEscape(fu.note)}` : ''}`);
     it.tooltip = md;
     return it;
@@ -529,17 +585,33 @@ function sessionFrom(arg, provider, view) {
   return sel && sel.s;
 }
 
+// Sessions a command applies to: every selected session when several are selected (and the
+// clicked one is among them), otherwise just the clicked one.
+function sessionsFrom(arg, selected, provider, view) {
+  const s = sessionFrom(arg, provider, view);
+  const many = (Array.isArray(selected) ? selected : []).filter((x) => x && x.kind === 'session').map((x) => x.s);
+  if (s && many.length > 1 && many.some((x) => x.id === s.id)) {
+    const seen = new Set();
+    return many.filter((x) => !seen.has(x.id) && seen.add(x.id));
+  }
+  return s ? [s] : [];
+}
+
 function activate(context) {
   const provider = new SessionsProvider(context.globalState);
-  const view = vscode.window.createTreeView('claudeSessions.list', { treeDataProvider: provider, showCollapseAll: true });
+  const view = vscode.window.createTreeView('claudeSessions.list', { treeDataProvider: provider, showCollapseAll: true, canSelectMany: true });
   context.subscriptions.push(view);
 
-  const setFilter = (f) => {
-    provider.filter = f;
-    view.message = f ? `Filter: "${f}"` : undefined;
-    vscode.commands.executeCommand('setContext', 'claudeSessions.filtered', !!f);
+  const updateFilterUi = () => {
+    const msgs = [];
+    if (provider.contentFilter) msgs.push(`Conversations containing "${provider.contentFilter.query}" (${provider.contentFilter.ids.size})`);
+    if (provider.filter) msgs.push(`Filter: "${provider.filter}"`);
+    view.message = msgs.length ? msgs.join(' · ') : undefined;
+    vscode.commands.executeCommand('setContext', 'claudeSessions.filtered', provider.filtering);
     provider._em.fire();
   };
+  const setFilter = (f) => { provider.filter = f; updateFilterUi(); };
+  vscode.commands.executeCommand('setContext', 'claudeSessions.showArchived', provider.showArchived);
 
   const reg = (id, fn) => context.subscriptions.push(vscode.commands.registerCommand(id, fn));
 
@@ -548,7 +620,7 @@ function activate(context) {
     const f = await vscode.window.showInputBox({ prompt: 'Filter by title, prompt, folder, branch or session ID', value: provider.filter });
     if (f !== undefined) setFilter(f.trim());
   });
-  reg('claudeSessions.clearFilter', () => setFilter(''));
+  reg('claudeSessions.clearFilter', () => { provider.contentFilter = null; setFilter(''); });
   reg('claudeSessions.toggleGroup', async () => {
     const cfg = vscode.workspace.getConfiguration('claudeSessions');
     await cfg.update('groupBy', cfg.get('groupBy') === 'folder' ? 'date' : 'folder', vscode.ConfigurationTarget.Global);
@@ -683,6 +755,226 @@ function activate(context) {
   reg('claudeSessions.clearFollowup', async (arg) => {
     const s = sessionFrom(arg, provider, view);
     if (s) await setFollowup(s, null);
+  });
+
+  // ---------- pins, notes, labels ----------
+  const patchMarks = async (list, patchFor) => {
+    let map = provider.marks();
+    for (const s of list) map = marks.update(map, s.id, typeof patchFor === 'function' ? patchFor(map[s.id] || {}, s) : patchFor);
+    await provider.setMarks(map);
+  };
+  const many = (list) => (list.length === 1 ? `"${truncate(list[0].title, 50)}"` : `${list.length} sessions`);
+
+  reg('claudeSessions.pin', async (arg, sel) => {
+    const list = sessionsFrom(arg, sel, provider, view);
+    await patchMarks(list, { pinned: true, archivedAt: null });
+  });
+  reg('claudeSessions.unpin', async (arg, sel) => {
+    await patchMarks(sessionsFrom(arg, sel, provider, view), { pinned: false });
+  });
+
+  reg('claudeSessions.editNote', async (arg) => {
+    const s = sessionFrom(arg, provider, view);
+    if (!s) return;
+    const cur = (provider.marks()[s.id] || {}).note || '';
+    const v = await vscode.window.showInputBox({
+      title: `Note for "${truncate(s.title, 50)}"`,
+      prompt: 'Shown under the session and on hover. Leave empty to remove the note.',
+      placeHolder: 'e.g. step 2 of 4 done, next: tests',
+      value: cur,
+      ignoreFocusOut: true,
+    });
+    if (v === undefined) return;
+    await patchMarks([s], { note: v.trim().slice(0, 300) || null });
+  });
+
+  reg('claudeSessions.setLabels', async (arg, sel) => {
+    const list = sessionsFrom(arg, sel, provider, view);
+    if (!list.length) return;
+    const map = provider.marks();
+    const labelsOf = (s) => (map[s.id] && map[s.id].labels) || [];
+    // Labels every chosen session already has start checked; others are left alone unless checked.
+    const initial = labelsOf(list[0]).filter((l) => list.every((s) => labelsOf(s).includes(l)));
+    const known = [...new Set([...marks.allLabels(map), ...initial])];
+    const qp = vscode.window.createQuickPick();
+    qp.canSelectMany = true;
+    qp.ignoreFocusOut = true;
+    qp.title = `Labels for ${many(list)}`;
+    qp.placeholder = known.length ? 'Check labels, or type a new one and press Enter' : 'Type a label (e.g. bug, feature, research) and press Enter';
+    const base = known.map((l) => ({ label: `#${l}`, l }));
+    qp.items = base;
+    qp.selectedItems = base.filter((it) => initial.includes(it.l));
+    qp.onDidChangeValue((v) => {
+      const n = marks.normalizeLabel(v);
+      const keep = qp.selectedItems;
+      const extra = n && !known.includes(n) ? [{ label: `$(add) #${n}`, description: 'new label', l: n, alwaysShow: true }] : [];
+      qp.items = [...extra, ...base];
+      qp.selectedItems = qp.items.filter((it) => keep.some((k) => k.l === it.l));
+    });
+    const chosen = await new Promise((resolve) => {
+      qp.onDidAccept(() => {
+        const set = new Set(qp.selectedItems.map((it) => it.l));
+        // Typing a brand-new label and pressing Enter adds it without having to check it first.
+        const n = marks.normalizeLabel(qp.value);
+        if (n && (known.includes(n) || !known.some((l) => l.includes(n)))) set.add(n);
+        resolve(set);
+        qp.hide();
+      });
+      qp.onDidHide(() => resolve(null));
+      qp.show();
+    });
+    qp.dispose();
+    if (!chosen) return;
+    const removed = initial.filter((l) => !chosen.has(l));
+    await patchMarks(list, (m) => {
+      const next = (m.labels || []).filter((l) => !removed.includes(l));
+      for (const l of chosen) if (!next.includes(l)) next.push(l);
+      return { labels: next };
+    });
+  });
+
+  reg('claudeSessions.filterByLabel', async () => {
+    const map = provider.marks();
+    const labels = marks.allLabels(map);
+    if (!labels.length) { vscode.window.showInformationMessage('No labels yet. Right-click a session and choose Set Labels… to add one.'); return; }
+    const count = (l) => Object.values(map).filter((m) => (m.labels || []).includes(l)).length;
+    const pick = await vscode.window.showQuickPick(labels.map((l) => ({ label: `#${l}`, description: `${count(l)} session${count(l) === 1 ? '' : 's'}`, l })), { title: 'Show sessions with label' });
+    if (pick) setFilter(`#${pick.l}`);
+  });
+
+  // ---------- archive & delete ----------
+  reg('claudeSessions.archive', async (arg, sel) => {
+    const list = sessionsFrom(arg, sel, provider, view);
+    if (!list.length) return;
+    await patchMarks(list, { archivedAt: Date.now(), pinned: false, unarchivedAt: null });
+    const undo = await vscode.window.showInformationMessage(
+      `Archived ${many(list)}. ${provider.showArchived ? '' : 'Use Show Archived in the ⋯ menu to see archived sessions. '}Resuming a session brings it back.`, 'Undo');
+    if (undo === 'Undo') await patchMarks(list, { archivedAt: null });
+  });
+  reg('claudeSessions.unarchive', async (arg, sel) => {
+    await patchMarks(sessionsFrom(arg, sel, provider, view), { archivedAt: null, unarchivedAt: Date.now() });
+  });
+  const setShowArchived = async (v) => {
+    await context.globalState.update(SHOW_ARCHIVED_KEY, v);
+    vscode.commands.executeCommand('setContext', 'claudeSessions.showArchived', v);
+    provider._em.fire();
+  };
+  reg('claudeSessions.showArchived', () => setShowArchived(true));
+  reg('claudeSessions.hideArchived', () => setShowArchived(false));
+
+  reg('claudeSessions.delete', async (arg, sel) => {
+    const list = sessionsFrom(arg, sel, provider, view);
+    if (!list.length) return;
+    provider.refreshRunning();
+    const open = list.filter((s) => provider.running.has(s.id));
+    if (open.length) {
+      vscode.window.showWarningMessage(`${many(open)} ${open.length === 1 ? 'is' : 'are'} still open in a terminal. Exit Claude there first, then delete.`);
+      return;
+    }
+    const names = list.slice(0, 8).map((s) => `• ${truncate(s.title, 70)}`).join('\n') + (list.length > 8 ? `\n…and ${list.length - 8} more` : '');
+    const ok = await vscode.window.showWarningMessage(
+      `Delete ${many(list)}?`,
+      { modal: true, detail: `${names}\n\nThe conversation files are moved to the Trash, so you can restore them from there. After deleting, the session can no longer be resumed.\n\nTo just hide a session, use Archive instead.` },
+      'Move to Trash', 'Archive Instead');
+    if (ok === 'Archive Instead') { vscode.commands.executeCommand('claudeSessions.archive', { s: list[0] }, list.map((s) => ({ kind: 'session', s }))); return; }
+    if (ok !== 'Move to Trash') return;
+    const failed = [];
+    for (const s of list) {
+      const targets = [
+        s.file, // the conversation
+        path.join(path.dirname(s.file), s.id), // subagent transcripts and large tool results
+        path.join(os.homedir(), '.claude', 'file-history', s.id), // file backups used by /rewind
+        path.join(os.homedir(), '.claude', 'session-env', s.id),
+      ];
+      try {
+        for (const t of targets) {
+          if (fs.existsSync(t)) await vscode.workspace.fs.delete(vscode.Uri.file(t), { recursive: true, useTrash: true });
+        }
+      } catch (e) {
+        failed.push(`${truncate(s.title, 40)}: ${e.message}`);
+        continue;
+      }
+      cache.delete(s.file);
+      detailCache.delete(s.file);
+    }
+    const gone = new Set(list.filter((s) => !fs.existsSync(s.file)).map((s) => s.id));
+    let mk = provider.marks();
+    for (const id of gone) mk = marks.remove(mk, id);
+    await provider.setMarks(mk);
+    const fu = { ...provider.followups() };
+    for (const id of gone) delete fu[id];
+    await provider.setFollowups(fu);
+    if (provider.contentFilter) for (const id of gone) provider.contentFilter.ids.delete(id);
+    provider.refresh();
+    updateStatus();
+    if (failed.length) vscode.window.showErrorMessage(`Could not delete: ${failed.join('; ')}`);
+    else vscode.window.setStatusBarMessage(`Moved ${gone.size} session${gone.size === 1 ? '' : 's'} to the Trash`, 4000);
+  });
+
+  // ---------- search inside conversations ----------
+  const KIND = {
+    prompt: ['account', 'Your prompt'],
+    reply: ['sparkle', 'Claude'],
+    command: ['terminal', 'Command'],
+    file: ['edit', 'File changed'],
+    tool: ['tools', 'Tool'],
+  };
+  let lastQuery = '';
+  reg('claudeSessions.searchConversations', async () => {
+    const q = await vscode.window.showInputBox({
+      title: 'Search inside conversations',
+      prompt: 'Searches your prompts, Claude\'s replies, commands and changed files in every session. All words must appear on the same line.',
+      placeHolder: 'e.g. ThemeToggle.tsx, npm test, migration',
+      value: lastQuery,
+    });
+    if (!q || !q.trim()) return;
+    lastQuery = q.trim();
+    const results = await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: `Searching conversations for "${lastQuery}"`, cancellable: true },
+      async (progress, token) => {
+        const list = provider.allSessions();
+        const out = [];
+        for (let i = 0; i < list.length; i++) {
+          if (token.isCancellationRequested) break;
+          if (i % 5 === 0) {
+            progress.report({ message: `${i} of ${list.length}`, increment: (5 / list.length) * 100 });
+            await new Promise((r) => setImmediate(r));
+          }
+          const d = getDetails(list[i]);
+          if (!d) continue;
+          const r = search.searchConversation(d.markdown, lastQuery, { limit: 20 });
+          if (r.total) out.push({ s: list[i], ...r });
+        }
+        return out;
+      });
+    if (!results.length) { vscode.window.showInformationMessage(`No conversation contains "${lastQuery}".`); return; }
+    const total = results.reduce((n, r) => n + r.total, 0);
+    const items = [{
+      label: `$(filter) Show the ${results.length} matching session${results.length === 1 ? '' : 's'} in the sidebar`,
+      description: `${total} match${total === 1 ? '' : 'es'}`,
+      filter: true,
+      alwaysShow: true,
+    }];
+    for (const r of results) {
+      items.push({ label: `${r.s.title} · ${path.basename(r.s.cwd)}`, kind: vscode.QuickPickItemKind.Separator });
+      for (const m of r.matches) {
+        const [icon, name] = KIND[m.kind] || KIND.tool;
+        items.push({ label: `$(${icon}) ${m.snippet}`, description: name, s: r.s, line: m.line });
+      }
+      if (r.total > r.matches.length) items.push({ label: `$(ellipsis) ${r.total - r.matches.length} more in this session`, description: 'open the conversation', s: r.s, line: r.matches[r.matches.length - 1].line });
+    }
+    const pick = await vscode.window.showQuickPick(items, {
+      title: `"${lastQuery}": ${total} match${total === 1 ? '' : 'es'} in ${results.length} session${results.length === 1 ? '' : 's'}`,
+      placeHolder: 'Pick a match to open the conversation at that point',
+      matchOnDescription: true,
+    });
+    if (!pick) return;
+    if (pick.filter) {
+      provider.contentFilter = { query: lastQuery, ids: new Set(results.map((r) => r.s.id)) };
+      updateFilterUi();
+      return;
+    }
+    openConversation(pick.s, pick.line);
   });
 
   const statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
@@ -982,4 +1274,4 @@ function activate(context) {
 
 function deactivate() {}
 
-module.exports = { activate, deactivate, _test: { loadSessions, getDetails } };
+module.exports = { activate, deactivate, _test: { loadSessions, getDetails, SessionsProvider } };

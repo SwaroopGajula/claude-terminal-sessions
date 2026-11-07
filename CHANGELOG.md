@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0
+- **Search Inside Conversations** toolbar button: finds text in prompts, Claude's replies, commands and changed files across all sessions. Open a match at that line, or filter the sidebar to the matching sessions.
+- **Pin to Top**, **notes** and **labels** (`#bug`, `#feature`…) for sessions. Filter by label from the ⋯ menu or by typing `#label` in the filter.
+- **Archive** hides finished sessions (with Undo; resuming brings them back). **Show Archived Sessions** in the ⋯ menu. New setting `claudeSessions.autoArchiveDays`.
+- **Delete Session** moves a session's files to the Trash after a confirmation.
+- Select several sessions to pin, label, archive or delete them together.
+- Fix: clicking a prompt, command or changed file now opens the conversation at the right line (it often landed too early in long sessions).
+
 ## 0.5.0
 - **Running sessions.** A live *Running* group shows every open Claude Code session: working, needs input or open. The status bar shows sessions that need your input.
 - Resuming a session that is already open warns you and offers to show its terminal or fork instead.
