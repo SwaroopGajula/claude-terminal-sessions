@@ -1,8 +1,8 @@
 {
   "name": "claude-terminal-sessions",
   "displayName": "Claude Terminal Sessions",
-  "description": "Browse, search, resume, fork and share your Claude Code terminal sessions from every folder: search inside conversations, pin, label, archive, follow-up reminders and daily summaries.",
-  "version": "0.6.0",
+  "description": "Claude Code session manager: every terminal session from every folder in one sidebar. Search inside conversations, resume, fork, pin, label, archive, share, follow-up reminders and daily summaries.",
+  "version": "0.6.1",
   "publisher": "SwaroopGajula",
   "license": "MIT",
   "repository": {
@@ -21,12 +21,19 @@
   "keywords": [
     "claude",
     "claude code",
-    "sessions",
-    "terminal",
+    "claude-code",
+    "anthropic",
     "ai",
+    "session manager",
+    "sessions",
     "history",
+    "conversation history",
     "resume",
-    "anthropic"
+    "terminal",
+    "cli",
+    "agent",
+    "productivity",
+    "cursor"
   ],
   "engines": {
     "vscode": "^1.90.0"
@@ -40,7 +47,7 @@
     "onStartupFinished"
   ],
   "scripts": {
-    "lint": "node --check extension.js && node --check share.js && node --check running.js && node --check followups.js && node --check summary.js && node --check marks.js && node --check search.js",
+    "lint": "node --check extension.js && node --check share.js && node --check running.js && node --check followups.js && node --check summary.js && node --check marks.js && node --check search.js && node --check paths.js",
     "test": "node --test test/*.test.js",
     "package": "npx --yes @vscode/vsce@4.1.0 package"
   },

@@ -5,7 +5,7 @@ const path = require('path');
 const os = require('os');
 const { execFileSync } = require('child_process');
 
-const SESSIONS_DIR = path.join(os.homedir(), '.claude', 'sessions');
+const SESSIONS_DIR = path.join(require('./paths').CLAUDE_DIR, 'sessions');
 
 function isAlive(pid) {
   if (!Number.isInteger(pid) || pid <= 0) return false;

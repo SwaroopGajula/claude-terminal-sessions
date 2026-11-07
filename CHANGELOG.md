@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.1
+- Uses `CLAUDE_CONFIG_DIR` when it is set, like Claude Code does, instead of always reading `~/.claude`.
+- `scripts/demo.js` creates invented demo sessions in a separate VS Code window for screenshots (not part of the extension).
+- Clearer Marketplace description and keywords.
+
 ## 0.6.0
 - **Search Inside Conversations** toolbar button: finds text in prompts, Claude's replies, commands and changed files across all sessions. Open a match at that line, or filter the sidebar to the matching sessions.
 - **Pin to Top**, **notes** and **labels** (`#bug`, `#feature`…) for sessions. Filter by label from the ⋯ menu or by typing `#label` in the filter.

@@ -5,7 +5,7 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 
-const PROJECTS_DIR = path.join(os.homedir(), '.claude', 'projects');
+const PROJECTS_DIR = path.join(require('./paths').CLAUDE_DIR, 'projects');
 const BUNDLE_FORMAT = 'claude-terminal-sessions/session';
 const BUNDLE_VERSION = 1;
 const MASK = '[REDACTED]';

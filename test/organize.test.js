@@ -97,3 +97,14 @@ test('long lines are clipped around the match', () => {
   assert.match(m.snippet, /^….*needle.*…$/);
   assert.ok(m.snippet.length <= 115);
 });
+
+// ---------- paths ----------
+
+test('claudeDir honors CLAUDE_CONFIG_DIR', () => {
+  const os = require('os');
+  const path = require('path');
+  const { claudeDir } = require('../paths');
+  assert.strictEqual(claudeDir({}), path.join(os.homedir(), '.claude'));
+  assert.strictEqual(claudeDir({ CLAUDE_CONFIG_DIR: '/opt/claude-data' }), '/opt/claude-data');
+  assert.strictEqual(claudeDir({ CLAUDE_CONFIG_DIR: '~/alt-claude' }), path.join(os.homedir(), 'alt-claude'));
+});

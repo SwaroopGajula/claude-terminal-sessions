@@ -10,7 +10,8 @@ const summary = require('./summary');
 const marks = require('./marks');
 const search = require('./search');
 
-const PROJECTS_DIR = path.join(os.homedir(), '.claude', 'projects');
+const { CLAUDE_DIR } = require('./paths');
+const PROJECTS_DIR = path.join(CLAUDE_DIR, 'projects');
 const cache = new Map(); // file -> { mtimeMs, size, session }
 
 // ---------- parsing ----------
@@ -883,8 +884,8 @@ function activate(context) {
       const targets = [
         s.file, // the conversation
         path.join(path.dirname(s.file), s.id), // subagent transcripts and large tool results
-        path.join(os.homedir(), '.claude', 'file-history', s.id), // file backups used by /rewind
-        path.join(os.homedir(), '.claude', 'session-env', s.id),
+        path.join(CLAUDE_DIR, 'file-history', s.id), // file backups used by /rewind
+        path.join(CLAUDE_DIR, 'session-env', s.id),
       ];
       try {
         for (const t of targets) {

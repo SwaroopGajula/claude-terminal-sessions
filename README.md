@@ -15,6 +15,10 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-B24E2C" alt="MIT license"></a>
 </p>
 
+<!-- Demo GIF goes here once recorded:
+<p align="center"><img src="media/demo.gif" width="900" alt="Claude Terminal Sessions demo"></p>
+-->
+
 ---
 
 ## Why
@@ -265,12 +269,15 @@ Resume in terminal · Fork session · Open conversation · Copy session ID · Co
 **From a `.vsix` file**
 
 ```bash
-code --install-extension claude-terminal-sessions-0.6.0.vsix
+code --install-extension claude-terminal-sessions-0.6.1.vsix
 ```
 
 or in VS Code: **Extensions** panel → `···` menu → **Install from VSIX…**
 
 Then click the **Claude Terminal Sessions** icon in the activity bar.
+
+If you set `CLAUDE_CONFIG_DIR` to keep Claude Code's data somewhere other than `~/.claude`, the extension uses that folder too.
+Start VS Code from a terminal where the variable is set (e.g. `code .`), so the extension can see it.
 
 ## Settings
 
@@ -301,6 +308,11 @@ code --install-extension claude-terminal-sessions-*.vsix
 
 There is no build step and there are no runtime dependencies. `extension.js` is the UI; the logic lives in plain JavaScript modules that are tested without VS Code: `share.js` (export/import), `running.js`, `followups.js`, `summary.js`, `marks.js` (pins, notes, labels, archive) and `search.js`.
 
+### Demo data for screenshots
+`node scripts/demo.js` creates invented sessions in `~/claude-demo` and opens a separate VS Code window that shows only them,
+so you can record screenshots or GIFs without exposing real work. Your normal VS Code and `~/.claude` are not touched.
+`node scripts/demo.js --clean` removes everything again.
+
 ### Automatic builds and releases (GitHub Actions)
 - **CI** (`.github/workflows/ci.yml`): every push to `main` and every pull request runs the checks and tests and builds the `.vsix`.
   Download it from the run page under **Artifacts**.
@@ -316,6 +328,12 @@ To release a new version:
 3. The workflow tests and builds, creates a GitHub Release with the `.vsix` and the changelog notes, and publishes to the
    VS Code Marketplace using **Trusted Publishing** (no token stored; set up once under the publisher's *Trusted Publishing* tab
    for this repo and `release.yml`), and to Open VSX if the `OVSX_PAT` secret is set.
+
+## Like it?
+
+If this saves you time, please ⭐ [star the repo](https://github.com/SwaroopGajula/claude-terminal-sessions) and
+[rate it on the Marketplace](https://marketplace.visualstudio.com/items?itemName=SwaroopGajula.claude-terminal-sessions&ssr=false#review-details).
+It helps other Claude Code users find it. Ideas and bug reports are welcome in [Issues](https://github.com/SwaroopGajula/claude-terminal-sessions/issues).
 
 ## Notes
 
