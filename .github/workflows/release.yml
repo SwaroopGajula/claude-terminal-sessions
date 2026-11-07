@@ -6,20 +6,19 @@ name: Release
 #   3. publish to the VS Code Marketplace using Trusted Publishing (no token needed;
 #      requires the Trusted Publishing policy for this repo + release.yml on the
 #      Marketplace publisher page)
-#   4. publish to Open VSX                 (only if the OVSX_PAT secret is set)
+#   4. publish to Open VSX using Trusted Publishing (no token needed; requires a trusted
+#      publisher for this repo + release.yml at open-vsx.org/user-settings/trusted-publishers)
 on:
   push:
     tags: ["v*.*.*"]
 
 permissions:
   contents: write # needed to create the GitHub Release
-  id-token: write # needed for Marketplace Trusted Publishing (OIDC)
+  id-token: write # needed for Trusted Publishing (OIDC) on the Marketplace and Open VSX
 
 jobs:
   release:
     runs-on: ubuntu-latest
-    env:
-      OVSX_PAT: ${{ secrets.OVSX_PAT }}
     steps:
       - uses: actions/checkout@v4
 
@@ -61,6 +60,6 @@ jobs:
       - name: Publish to VS Code Marketplace (Trusted Publishing)
         run: npx --yes @vscode/vsce@4.1.0 publish --oidc --packagePath *.vsix
 
-      - name: Publish to Open VSX
-        if: env.OVSX_PAT != ''
-        run: npx --yes ovsx@1.3.0 publish *.vsix -p "$OVSX_PAT"
+      # No OVSX_PAT here on purpose: a stored token would override trusted publishing.
+      - name: Publish to Open VSX (Trusted Publishing)
+        run: npx --yes ovsx@1.3.0 publish *.vsix --trusted-publishing

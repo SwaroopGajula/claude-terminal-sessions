@@ -12,6 +12,7 @@
 <p align="center">
   <a href="https://marketplace.visualstudio.com/items?itemName=SwaroopGajula.claude-terminal-sessions"><img src="https://img.shields.io/visual-studio-marketplace/v/SwaroopGajula.claude-terminal-sessions?label=VS%20Code%20Marketplace&color=B24E2C" alt="VS Code Marketplace version"></a>
   <a href="https://marketplace.visualstudio.com/items?itemName=SwaroopGajula.claude-terminal-sessions"><img src="https://img.shields.io/visual-studio-marketplace/i/SwaroopGajula.claude-terminal-sessions?color=B24E2C" alt="Installs"></a>
+  <a href="https://open-vsx.org/extension/SwaroopGajula/claude-terminal-sessions"><img src="https://img.shields.io/open-vsx/v/SwaroopGajula/claude-terminal-sessions?label=Open%20VSX&color=B24E2C" alt="Open VSX version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-B24E2C" alt="MIT license"></a>
 </p>
 
@@ -264,6 +265,10 @@ Resume in terminal · Fork session · Open conversation · Copy session ID · Co
   code --install-extension SwaroopGajula.claude-terminal-sessions
   ```
 
+**Cursor, Windsurf, VSCodium and other VS Code-based editors**
+
+Search **Claude Terminal Sessions** in the Extensions panel (it comes from [Open VSX](https://open-vsx.org/extension/SwaroopGajula/claude-terminal-sessions)).
+
 **From a `.vsix` file**
 
 ```bash
@@ -324,8 +329,9 @@ To release a new version:
    git push && git push --tags
    ```
 3. The workflow tests and builds, creates a GitHub Release with the `.vsix` and the changelog notes, and publishes to the
-   VS Code Marketplace using **Trusted Publishing** (no token stored; set up once under the publisher's *Trusted Publishing* tab
-   for this repo and `release.yml`), and to Open VSX if the `OVSX_PAT` secret is set.
+   VS Code Marketplace and Open VSX using **Trusted Publishing**, so no tokens are stored. It is set up once for this repo and
+   `release.yml`, under the Marketplace publisher's *Trusted Publishing* tab and at
+   [open-vsx.org/user-settings/trusted-publishers](https://open-vsx.org/user-settings/trusted-publishers).
 
 ## Like it?
 
