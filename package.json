@@ -1,8 +1,8 @@
 {
   "name": "claude-terminal-sessions",
   "displayName": "Claude Terminal Sessions",
-  "description": "Claude Code session manager: every terminal session from every folder in one sidebar. Search inside conversations, resume, fork, pin, label, archive, share, follow-up reminders and daily summaries.",
-  "version": "0.6.1",
+  "description": "Claude Code session manager: every terminal session from every folder in one sidebar. Search inside conversations, token usage and cost, resume, fork, pin, label, archive, share, follow-up reminders and daily summaries.",
+  "version": "0.7.0",
   "publisher": "SwaroopGajula",
   "license": "MIT",
   "repository": {
@@ -33,7 +33,9 @@
     "cli",
     "agent",
     "productivity",
-    "cursor"
+    "cursor",
+    "token usage",
+    "cost"
   ],
   "engines": {
     "vscode": "^1.90.0"
@@ -47,7 +49,7 @@
     "onStartupFinished"
   ],
   "scripts": {
-    "lint": "node --check extension.js && node --check share.js && node --check running.js && node --check followups.js && node --check summary.js && node --check marks.js && node --check search.js && node --check paths.js",
+    "lint": "node --check extension.js && node --check share.js && node --check running.js && node --check followups.js && node --check summary.js && node --check marks.js && node --check search.js && node --check paths.js && node --check usage.js",
     "test": "node --test test/*.test.js",
     "package": "npx --yes @vscode/vsce@4.1.0 package"
   },
@@ -219,6 +221,11 @@
         "command": "claudeSessions.delete",
         "title": "Delete Session (move to Trash)\u2026",
         "icon": "$(trash)"
+      },
+      {
+        "command": "claudeSessions.usageReport",
+        "title": "Token Usage and Cost Report",
+        "icon": "$(graph)"
       }
     ],
     "menus": {
@@ -272,6 +279,11 @@
           "command": "claudeSessions.hideArchived",
           "when": "view == claudeSessions.list && claudeSessions.showArchived",
           "group": "1_filter@2"
+        },
+        {
+          "command": "claudeSessions.usageReport",
+          "when": "view == claudeSessions.list",
+          "group": "navigation@0.6"
         }
       ],
       "view/item/context": [
@@ -506,6 +518,41 @@
           "default": 0,
           "minimum": 0,
           "description": "Automatically archive (hide) sessions not used for this many days. Pinned sessions and sessions with a follow-up are never auto-archived. 0 turns this off."
+        },
+        "claudeSessions.showCost": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the estimated cost of each session (at Anthropic API list prices) on its row, in its details and in the daily summary. Token counts are always shown."
+        },
+        "claudeSessions.modelPricing": {
+          "type": "object",
+          "default": {},
+          "markdownDescription": "Override or add model prices in US$ per million tokens, e.g. `{\"claude-opus-5-5\": {\"input\": 4, \"output\": 20, \"cacheRead\": 0.2, \"cacheWrite5m\": 5, \"cacheWrite1h\": 8}}`. Fields you leave out keep the built-in price.",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "input": {
+                "type": "number",
+                "minimum": 0
+              },
+              "output": {
+                "type": "number",
+                "minimum": 0
+              },
+              "cacheRead": {
+                "type": "number",
+                "minimum": 0
+              },
+              "cacheWrite5m": {
+                "type": "number",
+                "minimum": 0
+              },
+              "cacheWrite1h": {
+                "type": "number",
+                "minimum": 0
+              }
+            }
+          }
         }
       }
     }

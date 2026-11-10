@@ -59,6 +59,37 @@ and the files it changed. All words must appear on the same line, in any order; 
 
 The 🔍 **Filter** button is the quick version: it only looks at titles, prompts, folders, branches, session IDs, notes and labels.
 
+### Token usage and cost
+See how many tokens each session used and roughly what that would cost at Anthropic API list prices:
+
+- **On each row:** the estimated cost, e.g. `my-web-app · 2h ago · $4.20`
+- **On hover:** cost, output tokens, input tokens, cache reads and the models used
+- **Inside an expanded session:** a **Token usage** section with the totals and a line per model
+- **Daily summary:** the estimated cost per session and for the whole period
+- **Token Usage and Cost Report** (📈 in the toolbar): pick *Today*, *Yesterday*, *This week*, *Last 7 / 30 days* or *All time*
+  for a report by day, model, project and the most expensive sessions:
+
+```markdown
+# Claude Code usage: Last 7 days (2026-11-04 to 2026-11-10)
+
+**≈ $86.40** · 720K output · 3.1M input · 210M cache reads · 1,120 requests
+
+| Day        | Cost   | Output | Requests |
+|------------|-------:|-------:|---------:|
+| 2026-11-10 | $12.30 | 95K    | 160      |
+| 2026-11-09 | $31.75 | 260K   | 410      |
+```
+
+How it is calculated:
+- Prices are per model (Fable, Opus, Sonnet and Haiku generations), including **cache reads and writes**, which are usually most of
+  the tokens in a Claude Code session. Fast mode counts at 2× and subagent (Task tool) transcripts are included.
+- Claude Code writes each reply into the transcript several times; every reply is counted **once**.
+- It is an **estimate at API list prices**. On a Pro or Max plan you pay the subscription instead, so read it as what the same work
+  would cost through the API. Hide the cost with `claudeSessions.showCost: false` (token counts stay).
+- Prices can change. Override or add a model with `claudeSessions.modelPricing` (US$ per million tokens), e.g.
+  `{"claude-opus-5-5": {"input": 4, "output": 20, "cacheRead": 0.2, "cacheWrite5m": 5, "cacheWrite1h": 8}}`.
+  Models without a known price show their tokens and are marked as not priced.
+
 ### Pin, notes and labels
 Right-click a session (or click the rows inside an expanded session):
 
@@ -239,6 +270,7 @@ Automatic detection is not perfect. **Read the file before sharing it**, and onl
 - 📅 **Daily Summary** of your Claude Code work
 - 🔍 **Filter** by title, prompt text, folder, branch, session ID, note or `#label`
 - 🔎 **Search Inside Conversations**: prompts, replies, commands and changed files
+- 📈 **Token Usage and Cost Report** by day, model, project and session
 - 🌲 **Group by** date or folder
 - 📥 **Import Shared Session** from a `.claude-session.json` file
 - 🔄 **Refresh** (the list also refreshes when sessions change)
@@ -272,7 +304,7 @@ Search **Claude Terminal Sessions** in the Extensions panel (it comes from [Open
 **From a `.vsix` file**
 
 ```bash
-code --install-extension claude-terminal-sessions-0.6.1.vsix
+code --install-extension claude-terminal-sessions-0.7.0.vsix
 ```
 
 or in VS Code: **Extensions** panel → `···` menu → **Install from VSIX…**
@@ -289,6 +321,8 @@ Start VS Code from a terminal where the variable is set (e.g. `code .`), so the 
 | `claudeSessions.claudeCommand` | `claude` | Command used to launch Claude Code (e.g. a full path or an alias) |
 | `claudeSessions.groupBy` | `date` | Group sessions by `date` or `folder` |
 | `claudeSessions.maxSessions` | `300` | Maximum number of sessions to show |
+| `claudeSessions.showCost` | `true` | Show the estimated cost (API list prices) on rows, in details and in the daily summary |
+| `claudeSessions.modelPricing` | `{}` | Override or add model prices in US$ per million tokens |
 | `claudeSessions.autoArchiveDays` | `0` | Hide sessions not used for this many days (`0` = off). Pinned and followed-up sessions are kept |
 
 ## Privacy
@@ -309,7 +343,7 @@ npm run package   # builds claude-terminal-sessions-<version>.vsix
 code --install-extension claude-terminal-sessions-*.vsix
 ```
 
-There is no build step and there are no runtime dependencies. `extension.js` is the UI; the logic lives in plain JavaScript modules that are tested without VS Code: `share.js` (export/import), `running.js`, `followups.js`, `summary.js`, `marks.js` (pins, notes, labels, archive) and `search.js`.
+There is no build step and there are no runtime dependencies. `extension.js` is the UI; the logic lives in plain JavaScript modules that are tested without VS Code: `share.js` (export/import), `running.js`, `followups.js`, `summary.js`, `marks.js` (pins, notes, labels, archive), `search.js` and `usage.js` (tokens and cost).
 
 ### Demo data for screenshots
 `node scripts/demo.js` creates invented sessions in `~/claude-demo` and opens a separate VS Code window that shows only them,

@@ -68,6 +68,7 @@ function dayRange(date) {
 const inRange = (t, from, to) => t && t >= from && t < to;
 const short = (p) => (p.startsWith(os.homedir()) ? '~' + p.slice(os.homedir().length) : p);
 const clip = (s, n) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
+const fmtCost = (c) => require('./usage').formatCost(c);
 const timeOf = (d) => d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 
 // Activity of one session inside [from, to)
@@ -90,8 +91,12 @@ function sessionActivity(s, d, from, to) {
 }
 
 function buildSummary(items, { from, to, label }) {
-  // items: [{ s, d }] where d = session details
-  const acts = items.map(({ s, d }) => d && sessionActivity(s, d, from, to)).filter(Boolean);
+  // items: [{ s, d, u }] where d = session details and u = optional usage in the range ({ cost, ... })
+  const acts = items.map(({ s, d, u }) => {
+    const a = d && sessionActivity(s, d, from, to);
+    if (a && u && u.requests) a.cost = u.cost;
+    return a;
+  }).filter(Boolean);
   const lastDay = new Date(to - 1);
   const sameDay = from.toDateString() === lastDay.toDateString();
   const dateText = sameDay
@@ -106,7 +111,9 @@ function buildSummary(items, { from, to, label }) {
   }
   const total = (k) => acts.reduce((n, a) => n + a[k].length, 0);
   const n = (k, one, many) => `${total(k)} ${total(k) === 1 ? one : many}`;
-  L.push(`_${acts.length} session${acts.length === 1 ? '' : 's'} · ${n('prompts', 'prompt', 'prompts')} · ${n('files', 'file changed', 'files changed')} · ${n('commits', 'commit', 'commits')}${total('prs') ? ` · ${n('prs', 'PR', 'PRs')}` : ''}_`);
+  const priced = acts.filter((a) => typeof a.cost === 'number');
+  const cost = priced.length ? ` · ≈ ${fmtCost(priced.reduce((x, a) => x + a.cost, 0))} at API rates` : '';
+  L.push(`_${acts.length} session${acts.length === 1 ? '' : 's'} · ${n('prompts', 'prompt', 'prompts')} · ${n('files', 'file changed', 'files changed')} · ${n('commits', 'commit', 'commits')}${total('prs') ? ` · ${n('prs', 'PR', 'PRs')}` : ''}${cost}_`);
 
   const byFolder = new Map();
   for (const a of acts.sort((x, y) => x.start - y.start)) {
@@ -121,7 +128,7 @@ function buildSummary(items, { from, to, label }) {
       L.push('');
       L.push(`### ${a.s.title}`);
       const span = sameDay ? `${timeOf(a.start)} – ${timeOf(a.end)}` : `${a.start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${a.end.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
-      L.push(`${a.s.gitBranch ? `Branch \`${a.s.gitBranch}\` · ` : ''}${span} · ${a.prompts.length} prompt${a.prompts.length === 1 ? '' : 's'}`);
+      L.push(`${a.s.gitBranch ? `Branch \`${a.s.gitBranch}\` · ` : ''}${span} · ${a.prompts.length} prompt${a.prompts.length === 1 ? '' : 's'}${typeof a.cost === 'number' ? ` · ≈ ${fmtCost(a.cost)}` : ''}`);
       L.push('');
       if (a.prompts.length) {
         L.push('**Asked:**');

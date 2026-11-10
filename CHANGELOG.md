@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.0
+- **Token usage and cost.** Each session shows its estimated cost at Anthropic API list prices on its row, on hover and in a new *Token usage* section (output, input, cache reads and writes, per model). Each reply is counted once, cache tokens are priced per model, fast mode counts at 2×, and subagent transcripts are included.
+- **Token Usage and Cost Report** toolbar button: totals by day, model, project and most expensive sessions for today, yesterday, this week, the last 7 or 30 days, or all time.
+- The daily summary shows the estimated cost per session and for the period.
+- New settings: `claudeSessions.showCost` and `claudeSessions.modelPricing` (override or add prices).
+
 ## 0.6.1
 - Uses `CLAUDE_CONFIG_DIR` when it is set, like Claude Code does, instead of always reading `~/.claude`.
 - `scripts/demo.js` creates invented demo sessions in a separate VS Code window for screenshots (not part of the extension).

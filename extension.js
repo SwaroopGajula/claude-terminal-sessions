@@ -9,6 +9,7 @@ const followups = require('./followups');
 const summary = require('./summary');
 const marks = require('./marks');
 const search = require('./search');
+const usage = require('./usage');
 
 const { CLAUDE_DIR } = require('./paths');
 const PROJECTS_DIR = path.join(CLAUDE_DIR, 'projects');
@@ -54,6 +55,7 @@ function parseSession(file) {
     created: null,
     updated: null,
   };
+  const col = usage.createCollector();
   for (const line of raw.split('\n')) {
     if (!line) continue;
     // Cheap pre-filter: skip huge lines we don't care about.
@@ -68,6 +70,7 @@ function parseSession(file) {
       case 'last-prompt': s.lastPrompt = cleanPrompt(o.lastPrompt) || s.lastPrompt; break;
       case 'user':
       case 'assistant': {
+        if (o.type === 'assistant') col.add(o);
         if (o.cwd && !s.cwd) s.cwd = o.cwd;
         if (o.gitBranch && o.gitBranch !== 'HEAD') s.gitBranch = o.gitBranch;
         if (o.timestamp) {
@@ -90,6 +93,19 @@ function parseSession(file) {
     }
   }
   if (!s.userMessages && !s.customTitle && !s.aiTitle) return null; // empty / aborted session
+  // Subagents (Task tool) write their own transcripts next to the session; their tokens count too.
+  const subDir = path.join(path.dirname(file), s.id, 'subagents');
+  let subs = [];
+  try { subs = fs.readdirSync(subDir).filter((f) => f.endsWith('.jsonl')); } catch { /* none */ }
+  for (const f of subs) {
+    let text = '';
+    try { text = fs.readFileSync(path.join(subDir, f), 'utf8'); } catch { continue; }
+    for (const line of text.split('\n')) {
+      if (!line.includes('"usage"')) continue;
+      try { const o = JSON.parse(line); if (o.type === 'assistant') col.add(o); } catch { /* skip */ }
+    }
+  }
+  s.usage = col.days;
   if (!s.cwd) s.cwd = decodeDirName(path.basename(path.dirname(file)));
   s.title = s.customTitle || s.aiTitle || s.summary || truncate(s.firstPrompt, 70) || s.id;
   return s;
@@ -299,6 +315,15 @@ function mdEscape(s) {
   return String(s).replace(/[\\`*_{}[\]()#+\-.!|<>]/g, '\\$&');
 }
 
+// ---------- usage ----------
+
+const usageConfig = () => vscode.workspace.getConfiguration('claudeSessions');
+function usageSummary(sessions, range = {}) {
+  return usage.summarize(sessions.map((s) => s.usage), { ...range, overrides: usageConfig().get('modelPricing', {}) || {} });
+}
+const showCost = () => usageConfig().get('showCost', true);
+const costLabel = (u) => `≈ ${usage.formatCost(u.cost)}${u.unpriced.length ? '+' : ''}`;
+
 // ---------- tree ----------
 
 const FOLLOWUPS_KEY = 'claudeSessions.followups';
@@ -402,6 +427,19 @@ class SessionsProvider {
         kids.push({ kind: 'section', s, label: 'Files changed', icon: 'files', items: [...d.files.entries()].map(([fp, f]) => ({ kind: 'file', s, fp, f })) });
         kids.push({ kind: 'section', s, label: 'Commands run', icon: 'terminal', items: d.commands.map((c) => ({ kind: 'cmd', s, c })) });
       }
+      const u = s.usage && usageSummary([s]);
+      if (u && u.requests) {
+        const T = usage.formatTokens;
+        const rows = [];
+        if (showCost()) rows.push({ kind: 'info', s, label: 'Estimated cost', icon: 'credit-card', value: `${costLabel(u)} at API rates${u.unpriced.length ? ` (no price for ${u.unpriced.join(', ')})` : ''}` });
+        rows.push({ kind: 'info', s, label: 'Output tokens', icon: 'arrow-down', value: T(u.output) });
+        rows.push({ kind: 'info', s, label: 'Input tokens', icon: 'arrow-up', value: `${T(u.input)} new · ${T(u.cacheWrite5m + u.cacheWrite1h)} cache writes` });
+        rows.push({ kind: 'info', s, label: 'Cache reads', icon: 'database', value: T(u.cacheRead) });
+        for (const [model, bm] of Object.entries(u.byModel).sort((a, b) => b[1].cost - a[1].cost)) {
+          rows.push({ kind: 'info', s, label: model, icon: 'hubot', value: `${bm.requests} requests · ${T(bm.output)} output${showCost() ? ` · ${usage.formatCost(bm.cost)}` : ''}` });
+        }
+        kids.push({ kind: 'section', s, label: 'Token usage', icon: 'graph', items: rows, descOverride: showCost() ? costLabel(u) : T(u.output) + ' output' });
+      }
       return kids;
     }
     if (el.kind === 'section') return el.items;
@@ -464,6 +502,8 @@ class SessionsProvider {
     if (el.groupBy !== 'folder' || el.special) parts.push(path.basename(s.cwd));
     if (!run) parts.push(relTime(s.updated));
     if (m.note) parts.push(`📝 ${truncate(m.note, 40)}`);
+    const u = s.usage ? usageSummary([s]) : null;
+    if (u && showCost() && u.cost >= 0.01) parts.push(usage.formatCost(u.cost));
     it.description = parts.join(' · ');
     if (run) {
       it.iconPath = run.status === 'busy' ? new vscode.ThemeIcon('sync~spin', new vscode.ThemeColor('charts.blue'))
@@ -494,6 +534,10 @@ class SessionsProvider {
     md.appendMarkdown(`$(history) Updated ${s.updated.toLocaleString()} (${relTime(s.updated)})\n\n`);
     md.appendMarkdown(`$(comment) ${s.userMessages} prompts\n\n`);
     md.appendMarkdown(`$(key) \`${s.id}\``);
+    if (u && u.requests) {
+      const models = Object.entries(u.byModel).sort((a, b) => b[1].cost - a[1].cost || b[1].output - a[1].output).map(([k]) => k).join(', ');
+      md.appendMarkdown(`\n\n$(graph) ${showCost() ? `**${costLabel(u)}** at API rates · ` : ''}${usage.formatTokens(u.output)} output · ${usage.formatTokens(u.input + u.cacheWrite5m + u.cacheWrite1h)} input · ${usage.formatTokens(u.cacheRead)} cache reads · ${models}`);
+    }
     if (run) md.appendMarkdown(`\n\n$(pulse) **${running.STATUS_LABEL[run.status]}**${run.waitingFor ? ` (${mdEscape(run.waitingFor)})` : ''} · process ${run.pid}`);
     if (m.pinned) md.appendMarkdown('\n\n$(pinned) Pinned');
     if (archived) md.appendMarkdown(`\n\n$(archive) Archived${m.archivedAt ? ` on ${new Date(m.archivedAt).toLocaleDateString()}` : ' automatically (idle)'}`);
@@ -527,7 +571,7 @@ function childItem(el) {
       it = new vscode.TreeItem(el.label, el.items.length
         ? (el.expanded ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed)
         : None);
-      it.description = String(el.items.length);
+      it.description = el.descOverride || String(el.items.length);
       it.iconPath = new vscode.ThemeIcon(el.icon);
       break;
     case 'prompt': {
@@ -1072,7 +1116,8 @@ function activate(context) {
       { location: vscode.ProgressLocation.Window, title: 'Building Claude Code summary…' },
       async () => {
         const list = loadSessions().filter((s) => s.updated >= range.from && s.created < range.to);
-        return summary.buildSummary(list.map((s) => ({ s, d: getDetails(s) })), range);
+        const keys = { fromKey: usage.dayKey(range.from), toKey: usage.dayKey(new Date(range.to - 1)) };
+        return summary.buildSummary(list.map((s) => ({ s, d: getDetails(s), u: showCost() && s.usage ? usageSummary([s], keys) : null })), range);
       });
     const doc = await vscode.workspace.openTextDocument({ content: result.markdown, language: 'markdown' });
     await vscode.window.showTextDocument(doc, { preview: false });
@@ -1082,6 +1127,29 @@ function activate(context) {
     if (next === 'Copy to Clipboard') { await vscode.env.clipboard.writeText(result.markdown); vscode.window.setStatusBarMessage('Summary copied', 3000); }
     if (next === 'Open Preview') vscode.commands.executeCommand('markdown.showPreview', doc.uri);
   });
+  // ---------- usage report ----------
+  reg('claudeSessions.usageReport', async () => {
+    const R = summary.ranges();
+    const last30 = new Date(R.today.from); last30.setDate(last30.getDate() - 29);
+    const k = (r) => ({ fromKey: usage.dayKey(r.from), toKey: usage.dayKey(new Date(r.to - 1)) });
+    const items = [
+      { label: 'Today', ...k(R.today) },
+      { label: 'Yesterday', ...k(R.yesterday) },
+      { label: 'This week', ...k(R.thisWeek) },
+      { label: 'Last 7 days', ...k(R.last7) },
+      { label: 'Last 30 days', ...k({ from: last30, to: R.today.to }) },
+      { label: 'All time' },
+    ].map((x) => ({ ...x, description: x.fromKey ? (x.fromKey === x.toKey ? x.fromKey : `${x.fromKey} to ${x.toKey}`) : 'every session on this computer' }));
+    const pick = await vscode.window.showQuickPick(items, { title: 'Claude Code token usage and estimated cost', placeHolder: 'Which period?' });
+    if (!pick) return;
+    const md = usage.buildReport(loadSessions().map((s) => ({ title: s.title, cwd: s.cwd, usage: s.usage })), {
+      label: pick.label, fromKey: pick.fromKey, toKey: pick.toKey, overrides: usageConfig().get('modelPricing', {}) || {},
+    });
+    const doc = await vscode.workspace.openTextDocument({ content: md, language: 'markdown' });
+    await vscode.window.showTextDocument(doc, { preview: false });
+    vscode.commands.executeCommand('markdown.showPreview', doc.uri);
+  });
+
   reg('claudeSessions.copyId', async (arg) => {
     const s = sessionFrom(arg, provider, view);
     if (!s) return;
