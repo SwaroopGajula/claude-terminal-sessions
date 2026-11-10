@@ -161,7 +161,12 @@ function findExisting(id) {
 function rewritePath(p, oldCwd, newCwd) {
   if (typeof p !== 'string') return p;
   if (p === oldCwd) return newCwd;
-  if (p.startsWith(oldCwd + '/') || p.startsWith(oldCwd + '\\')) return newCwd + p.slice(oldCwd.length);
+  if (p.startsWith(oldCwd + '/') || p.startsWith(oldCwd + '\\')) {
+    // Use the new computer's separator for the rest of the path (e.g. a Mac export imported on Windows).
+    const rest = p.slice(oldCwd.length);
+    const winTarget = newCwd.includes('\\') && !newCwd.includes('/');
+    return newCwd + (winTarget ? rest.replace(/\//g, '\\') : newCwd.includes('/') ? rest.replace(/\\/g, '/') : rest);
+  }
   return p;
 }
 

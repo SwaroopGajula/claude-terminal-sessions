@@ -93,6 +93,9 @@ How it is calculated:
 ### Pin, notes and labels
 Right-click a session (or click the rows inside an expanded session):
 
+- **Rename…** (or select it and press **F2**): give a session your own name when Claude's automatic title is vague.
+  The new name is used everywhere in the extension (list, search, summaries, exports). Claude Code's own title is unchanged,
+  shown on hover, and still matches the filter. Clear the name to go back to it.
 - **Pin to Top**: the session also appears in a 📌 **Pinned** group at the top of the list. **Unpin** removes it.
 - **Edit Note…**: a line of your own, e.g. *step 2 of 4 done, next: tests*. It shows on the row (📝) and on hover. Clear the text to remove it.
 - **Set Labels…**: tags like `#bug`, `#feature` or `#research`. Check existing labels, or type a new one and press **Enter**.
@@ -278,12 +281,16 @@ Automatic detection is not perfect. **Read the file before sharing it**, and onl
 
 ### Session right-click menu
 Resume in terminal · Fork session · Open conversation · Copy session ID · Copy resume command
-(`cd '<folder>' && claude --resume <id>`) · Open folder in new window · Open raw transcript (`.jsonl`) · Share: Export for Reading · Share: Export to Continue on Another Computer · Set Follow-up Reminder · Clear Follow-up · Pin to Top / Unpin · Edit Note · Set Labels · Archive / Unarchive · Delete Session (move to Trash)
+(`cd '<folder>' && claude --resume <id>`, in your shell's syntax) · Open folder in new window · Open raw transcript (`.jsonl`) · Share: Export for Reading · Share: Export to Continue on Another Computer · Set Follow-up Reminder · Clear Follow-up · Rename (F2) · Pin to Top / Unpin · Edit Note · Set Labels · Archive / Unarchive · Delete Session (move to Trash)
 
 ## Requirements
 
-- VS Code 1.90 or newer
+- VS Code 1.90 or newer, on **macOS, Windows or Linux**
 - [Claude Code](https://docs.claude.com/en/docs/claude-code) installed and on your `PATH` (needed to resume sessions)
+
+**Windows:** *Copy Resume Command* uses the syntax of your default terminal (PowerShell, Command Prompt or Git Bash), and deleted
+sessions go to the Recycle Bin. If you run Claude Code inside **WSL**, its sessions live in the Linux home folder: open the folder
+with VS Code's WSL remote, and the extension runs there and lists them.
 
 ## Installation
 
@@ -304,7 +311,7 @@ Search **Claude Terminal Sessions** in the Extensions panel (it comes from [Open
 **From a `.vsix` file**
 
 ```bash
-code --install-extension claude-terminal-sessions-0.7.0.vsix
+code --install-extension claude-terminal-sessions-0.8.0.vsix
 ```
 
 or in VS Code: **Extensions** panel → `···` menu → **Install from VSIX…**
@@ -343,7 +350,7 @@ npm run package   # builds claude-terminal-sessions-<version>.vsix
 code --install-extension claude-terminal-sessions-*.vsix
 ```
 
-There is no build step and there are no runtime dependencies. `extension.js` is the UI; the logic lives in plain JavaScript modules that are tested without VS Code: `share.js` (export/import), `running.js`, `followups.js`, `summary.js`, `marks.js` (pins, notes, labels, archive), `search.js` and `usage.js` (tokens and cost).
+There is no build step and there are no runtime dependencies. `extension.js` is the UI; the logic lives in plain JavaScript modules that are tested without VS Code: `share.js` (export/import), `running.js`, `followups.js`, `summary.js`, `marks.js` (pins, notes, labels, archive), `search.js`, `usage.js` (tokens and cost) and `shell.js` (command lines per shell). CI runs the tests on Linux, Windows and macOS.
 
 ### Demo data for screenshots
 `node scripts/demo.js` creates invented sessions in `~/claude-demo` and opens a separate VS Code window that shows only them,

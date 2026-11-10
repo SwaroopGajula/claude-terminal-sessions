@@ -10,10 +10,12 @@ const summary = require('./summary');
 const marks = require('./marks');
 const search = require('./search');
 const usage = require('./usage');
+const shell = require('./shell');
 
 const { CLAUDE_DIR } = require('./paths');
 const PROJECTS_DIR = path.join(CLAUDE_DIR, 'projects');
 const cache = new Map(); // file -> { mtimeMs, size, session }
+let namesState = null; // globalState, for session names given in the sidebar
 
 // ---------- parsing ----------
 
@@ -107,7 +109,8 @@ function parseSession(file) {
   }
   s.usage = col.days;
   if (!s.cwd) s.cwd = decodeDirName(path.basename(path.dirname(file)));
-  s.title = s.customTitle || s.aiTitle || s.summary || truncate(s.firstPrompt, 70) || s.id;
+  s.baseTitle = s.customTitle || s.aiTitle || s.summary || truncate(s.firstPrompt, 70) || s.id;
+  s.title = s.baseTitle;
   return s;
 }
 
@@ -280,6 +283,9 @@ function loadSessions() {
     }
   }
   for (const k of cache.keys()) if (!seen.has(k)) cache.delete(k);
+  // Names given with "Rename…" (stored by the extension) take precedence over Claude's titles.
+  const names = (namesState && namesState.get('claudeSessions.marks')) || {};
+  for (const s of out) s.title = (names[s.id] && names[s.id].name) || s.baseTitle || s.title;
   out.sort((a, b) => b.updated - a.updated);
   return out;
 }
@@ -524,6 +530,7 @@ class SessionsProvider {
     const md = new vscode.MarkdownString(undefined, true);
     md.isTrusted = false;
     md.appendMarkdown(`**${mdEscape(s.title)}**\n\n`);
+    if (s.baseTitle && s.title !== s.baseTitle) md.appendMarkdown(`_Renamed. Claude's title: ${mdEscape(s.baseTitle)}_\n\n`);
     const desc = s.firstPrompt && s.firstPrompt !== s.title ? s.firstPrompt : '';
     if (desc) md.appendMarkdown(`${mdEscape(truncate(desc, 400))}\n\n`);
     if (s.lastPrompt && s.lastPrompt !== s.firstPrompt) md.appendMarkdown(`_Last prompt:_ ${mdEscape(truncate(s.lastPrompt, 200))}\n\n`);
@@ -617,11 +624,16 @@ function childItem(el) {
 
 // ---------- commands ----------
 
-function shq(s) { return `'${String(s).replace(/'/g, `'\\''`)}'`; }
+const IS_WIN = process.platform === 'win32';
+const TRASH = IS_WIN ? 'Recycle Bin' : 'Trash';
+const REVEAL = IS_WIN ? 'Reveal in File Explorer' : process.platform === 'darwin' ? 'Reveal in Finder' : 'Show in Folder';
 
+// "cd <folder> && claude --resume <id>" in the syntax of the user's default terminal shell.
 function resumeCommand(s) {
   const bin = vscode.workspace.getConfiguration('claudeSessions').get('claudeCommand', 'claude');
-  return `cd ${shq(s.cwd)} && ${bin} --resume ${s.id}`;
+  let shellPath = '';
+  try { shellPath = vscode.env.shell; } catch { /* older VS Code or tests */ }
+  return shell.cdAndRun(shell.shellKind(process.platform, shellPath), s.cwd, `${bin} --resume ${s.id}`);
 }
 
 function sessionFrom(arg, provider, view) {
@@ -643,6 +655,7 @@ function sessionsFrom(arg, selected, provider, view) {
 }
 
 function activate(context) {
+  namesState = context.globalState;
   const provider = new SessionsProvider(context.globalState);
   const view = vscode.window.createTreeView('claudeSessions.list', { treeDataProvider: provider, showCollapseAll: true, canSelectMany: true });
   context.subscriptions.push(view);
@@ -691,10 +704,11 @@ function activate(context) {
 
   // The VS Code terminal running this Claude process, if any (its shell is the parent process).
   const findTerminal = async (pid) => {
-    const parent = running.parentPid(pid);
+    if (!vscode.window.terminals.length) return null;
+    const family = new Set([pid, ...running.ancestorPids(pid, 3)]);
     for (const t of vscode.window.terminals) {
       const tp = await t.processId;
-      if (tp && (tp === pid || tp === parent)) return t;
+      if (tp && family.has(tp)) return t;
     }
     return null;
   };
@@ -818,6 +832,23 @@ function activate(context) {
     await patchMarks(sessionsFrom(arg, sel, provider, view), { pinned: false });
   });
 
+  reg('claudeSessions.rename', async (arg) => {
+    const s = sessionFrom(arg, provider, view);
+    if (!s) return;
+    const v = await vscode.window.showInputBox({
+      title: 'Rename session',
+      prompt: `Shown in this sidebar only; Claude Code's own title stays "${truncate(s.baseTitle || s.title, 60)}". Leave empty to go back to it.`,
+      value: s.title,
+      valueSelection: [0, s.title.length],
+      ignoreFocusOut: true,
+    });
+    if (v === undefined) return;
+    const name = v.trim().slice(0, 120);
+    await patchMarks([s], { name: name && name !== s.baseTitle ? name : null });
+    detailCache.delete(s.file); // the conversation view's heading shows the title
+    provider.refresh();
+  });
+
   reg('claudeSessions.editNote', async (arg) => {
     const s = sessionFrom(arg, provider, view);
     if (!s) return;
@@ -919,10 +950,10 @@ function activate(context) {
     const names = list.slice(0, 8).map((s) => `• ${truncate(s.title, 70)}`).join('\n') + (list.length > 8 ? `\n…and ${list.length - 8} more` : '');
     const ok = await vscode.window.showWarningMessage(
       `Delete ${many(list)}?`,
-      { modal: true, detail: `${names}\n\nThe conversation files are moved to the Trash, so you can restore them from there. After deleting, the session can no longer be resumed.\n\nTo just hide a session, use Archive instead.` },
-      'Move to Trash', 'Archive Instead');
+      { modal: true, detail: `${names}\n\nThe conversation files are moved to the ${TRASH}, so you can restore them from there. After deleting, the session can no longer be resumed.\n\nTo just hide a session, use Archive instead.` },
+      `Move to ${TRASH}`, 'Archive Instead');
     if (ok === 'Archive Instead') { vscode.commands.executeCommand('claudeSessions.archive', { s: list[0] }, list.map((s) => ({ kind: 'session', s }))); return; }
-    if (ok !== 'Move to Trash') return;
+    if (ok !== `Move to ${TRASH}`) return;
     const failed = [];
     for (const s of list) {
       const targets = [
@@ -953,7 +984,7 @@ function activate(context) {
     provider.refresh();
     updateStatus();
     if (failed.length) vscode.window.showErrorMessage(`Could not delete: ${failed.join('; ')}`);
-    else vscode.window.setStatusBarMessage(`Moved ${gone.size} session${gone.size === 1 ? '' : 's'} to the Trash`, 4000);
+    else vscode.window.setStatusBarMessage(`Moved ${gone.size} session${gone.size === 1 ? '' : 's'} to the ${TRASH}`, 4000);
   });
 
   // ---------- search inside conversations ----------
@@ -1198,9 +1229,9 @@ function activate(context) {
     ? `${r.total} likely secret(s) were removed automatically (${share.summarizeCounts(r.counts)}).`
     : 'No secrets were detected automatically.');
   const afterSave = async (uri, extra) => {
-    const pick = await vscode.window.showInformationMessage(`Saved ${path.basename(uri.fsPath)}.${extra ? ' ' + extra : ''}`, 'Open', 'Reveal in Finder');
+    const pick = await vscode.window.showInformationMessage(`Saved ${path.basename(uri.fsPath)}.${extra ? ' ' + extra : ''}`, 'Open', REVEAL);
     if (pick === 'Open') vscode.window.showTextDocument(uri);
-    if (pick === 'Reveal in Finder') vscode.commands.executeCommand('revealFileInOS', uri);
+    if (pick === REVEAL) vscode.commands.executeCommand('revealFileInOS', uri);
   };
 
   reg('claudeSessions.exportMarkdown', async (arg) => {
@@ -1343,4 +1374,4 @@ function activate(context) {
 
 function deactivate() {}
 
-module.exports = { activate, deactivate, _test: { loadSessions, getDetails, SessionsProvider } };
+module.exports = { activate, deactivate, _test: { loadSessions, getDetails, SessionsProvider, setNamesState: (st) => { namesState = st; } } };

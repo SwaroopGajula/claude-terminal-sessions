@@ -46,11 +46,31 @@ const rank = (e) => RANK[e.status] || 0;
 const STATUS_LABEL = { busy: 'Working', waiting: 'Needs input', idle: 'Open' };
 
 function parentPid(pid) {
-  try {
-    const out = execFileSync('ps', ['-o', 'ppid=', '-p', String(pid)], { encoding: 'utf8', timeout: 2000 }).trim();
-    const n = parseInt(out, 10);
-    return Number.isInteger(n) ? n : null;
-  } catch { return null; }
+  const [p] = ancestorPids(pid, 1);
+  return p || null;
 }
 
-module.exports = { SESSIONS_DIR, readRunning, isAlive, parentPid, STATUS_LABEL, rank };
+// Parent, grandparent, ... of a process (up to `depth`). Used to find the VS Code terminal whose shell
+// started Claude Code: on Windows there is often a cmd.exe or node launcher in between.
+function ancestorPids(pid, depth = 3, platform = process.platform) {
+  const n = Math.trunc(Number(pid));
+  if (!Number.isInteger(n) || n <= 0) return [];
+  try {
+    if (platform === 'win32') {
+      const script = `$p=${n}; $o=@(); for($i=0;$i -lt ${depth};$i++){ $q=(Get-CimInstance Win32_Process -Filter "ProcessId=$p").ParentProcessId; if(-not $q){break}; $o+=$q; $p=$q }; $o -join ','`;
+      const out = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8', timeout: 5000, windowsHide: true });
+      return out.trim().split(',').map((x) => parseInt(x, 10)).filter((x) => Number.isInteger(x) && x > 0);
+    }
+    const out = [];
+    let cur = n;
+    for (let i = 0; i < depth; i++) {
+      const p = parseInt(execFileSync('ps', ['-o', 'ppid=', '-p', String(cur)], { encoding: 'utf8', timeout: 2000 }).trim(), 10);
+      if (!Number.isInteger(p) || p <= 1) break;
+      out.push(p);
+      cur = p;
+    }
+    return out;
+  } catch { return []; }
+}
+
+module.exports = { SESSIONS_DIR, readRunning, isAlive, parentPid, ancestorPids, STATUS_LABEL, rank };

@@ -5,7 +5,7 @@ const os = require('os');
 function claudeDir(env = process.env) {
   const v = (env.CLAUDE_CONFIG_DIR || '').trim();
   if (!v) return path.join(os.homedir(), '.claude');
-  return path.resolve(v === '~' ? os.homedir() : v.startsWith('~/') ? path.join(os.homedir(), v.slice(2)) : v);
+  return path.resolve(v === '~' ? os.homedir() : /^~[\\/]/.test(v) ? path.join(os.homedir(), v.slice(2)) : v);
 }
 
 const CLAUDE_DIR = claudeDir();

@@ -1,7 +1,7 @@
 // Pins, notes, labels and archive state for sessions. Pure (no vscode dependency).
-// Stored by the extension (never in Claude's files) as { [sessionId]: { pinned, note, labels, archivedAt } }.
+// Stored by the extension (never in Claude's files) as { [sessionId]: { name, pinned, note, labels, archivedAt } }.
 
-const EMPTY = (m) => !m.pinned && !m.note && !(m.labels && m.labels.length) && !m.archivedAt && !m.unarchivedAt;
+const EMPTY = (m) => !m.name && !m.pinned && !m.note && !(m.labels && m.labels.length) && !m.archivedAt && !m.unarchivedAt;
 
 // Returns a new map with `patch` merged into the session's entry; empty entries are removed.
 function update(map, id, patch) {
@@ -47,7 +47,7 @@ function matchesFilter(s, m, filter) {
   const words = String(filter || '').toLowerCase().split(/\s+/).filter(Boolean);
   if (!words.length) return true;
   const labels = (m && m.labels) || [];
-  const hay = [s.title, s.firstPrompt, s.lastPrompt, s.cwd, s.id, s.gitBranch, m && m.note, ...labels]
+  const hay = [s.title, s.baseTitle, s.firstPrompt, s.lastPrompt, s.cwd, s.id, s.gitBranch, m && m.note, ...labels]
     .filter(Boolean).join('\n').toLowerCase();
   return words.every((w) => (w.startsWith('#') && w.length > 1 ? labels.includes(normalizeLabel(w)) : hay.includes(w)));
 }

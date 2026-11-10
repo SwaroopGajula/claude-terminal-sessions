@@ -11,8 +11,13 @@ permissions:
   contents: read
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  test:
+    # The extension runs on all three; Windows in particular can't be tested locally.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -25,6 +30,16 @@ jobs:
 
       - name: Run tests
         run: npm test
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
       - name: Build .vsix
         run: npm run package
