@@ -46,6 +46,15 @@ test('import rewrites paths with the new computer\'s separator', () => {
   assert.strictEqual(JSON.parse(back.trim()).cwd, '/home/c/proj/src');
 });
 
+test('relativeIn accepts either separator', () => {
+  const { relativeIn } = require('../summary');
+  assert.strictEqual(relativeIn('/projects/app', '/projects/app/src/App.tsx'), 'src/App.tsx');
+  assert.strictEqual(relativeIn('C:\\Users\\me\\app', 'C:\\Users\\me\\app\\src\\App.tsx'), 'src\\App.tsx');
+  assert.strictEqual(relativeIn('C:\\Users\\me\\app', 'c:\\users\\me\\app/src/App.tsx'), 'src/App.tsx'); // Windows paths ignore case
+  assert.strictEqual(relativeIn('/projects/app', '/projects/application/x.ts'), null);
+  assert.strictEqual(relativeIn('/projects/app', '/projects/app'), null);
+});
+
 test('projectDirFor encodes Windows paths like Claude Code', () => {
   const path = require('path');
   assert.strictEqual(path.basename(share.projectDirFor('C:\\Users\\me\\my-app')), 'C--Users-me-my-app');

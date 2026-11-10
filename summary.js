@@ -68,6 +68,13 @@ function dayRange(date) {
 const inRange = (t, from, to) => t && t >= from && t < to;
 const short = (p) => (p.startsWith(os.homedir()) ? '~' + p.slice(os.homedir().length) : p);
 const clip = (s, n) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
+// Path of `f` inside folder `cwd` ("src/App.tsx"), accepting / or \ as separator; null if outside.
+function relativeIn(cwd, f) {
+  if (!cwd || !f || f.length <= cwd.length) return null;
+  const sep = f[cwd.length];
+  if ((sep !== '/' && sep !== '\\') || f.slice(0, cwd.length).toLowerCase() !== cwd.toLowerCase()) return null;
+  return f.slice(cwd.length + 1);
+}
 const fmtCost = (c) => require('./usage').formatCost(c);
 const timeOf = (d) => d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 
@@ -144,7 +151,7 @@ function buildSummary(items, { from, to, label }) {
         for (const t of a.prs) L.push(`- ${t}`);
       }
       if (a.files.length) {
-        const names = a.files.map((f) => (f.startsWith(cwd + path.sep) ? path.relative(cwd, f) : short(f)));
+        const names = a.files.map((f) => relativeIn(cwd, f) || short(f));
         L.push(`**Files changed (${names.length}):** ${names.slice(0, 12).map((n) => `\`${n}\``).join(', ')}${names.length > 12 ? `, …and ${names.length - 12} more` : ''}`);
       }
     }
@@ -152,4 +159,4 @@ function buildSummary(items, { from, to, label }) {
   return { markdown: L.join('\n') + '\n', count: acts.length };
 }
 
-module.exports = { commitMessages, prTitles, isPush, ranges, dayRange, sessionActivity, buildSummary };
+module.exports = { relativeIn, commitMessages, prTitles, isPush, ranges, dayRange, sessionActivity, buildSummary };

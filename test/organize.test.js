@@ -107,6 +107,6 @@ test('claudeDir honors CLAUDE_CONFIG_DIR', () => {
   const path = require('path');
   const { claudeDir } = require('../paths');
   assert.strictEqual(claudeDir({}), path.join(os.homedir(), '.claude'));
-  assert.strictEqual(claudeDir({ CLAUDE_CONFIG_DIR: '/opt/claude-data' }), '/opt/claude-data');
+  assert.strictEqual(claudeDir({ CLAUDE_CONFIG_DIR: '/opt/claude-data' }), path.resolve('/opt/claude-data')); // D:\opt\... on Windows
   assert.strictEqual(claudeDir({ CLAUDE_CONFIG_DIR: '~/alt-claude' }), path.join(os.homedir(), 'alt-claude'));
 });

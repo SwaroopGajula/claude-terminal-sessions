@@ -4,6 +4,7 @@
 - **Rename sessions** from the right-click menu or with **F2**. The name is stored by the extension; Claude Code's own title is unchanged, shown on hover and still searchable.
 - **Windows support:** *Copy Resume Command* uses your default shell's syntax (PowerShell, Command Prompt, Git Bash, bash/zsh, fish); finding the terminal of a running session works on Windows; deleted sessions go to the Recycle Bin; importing a session exported on another OS converts path separators.
 - CI runs the tests on Linux, Windows and macOS.
+- Fix: changed files are shown relative to the project folder whether their paths use `/` or `\`.
 
 ## 0.7.0
 - **Token usage and cost.** Each session shows its estimated cost at Anthropic API list prices on its row, on hover and in a new *Token usage* section (output, input, cache reads and writes, per model). Each reply is counted once, cache tokens are priced per model, fast mode counts at 2×, and subagent transcripts are included.

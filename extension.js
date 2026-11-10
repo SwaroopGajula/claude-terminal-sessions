@@ -593,7 +593,8 @@ function childItem(el) {
     case 'file': {
       const { fp, f } = el;
       it = new vscode.TreeItem(path.basename(fp), None);
-      const rel = fp.startsWith(s.cwd + path.sep) ? path.relative(s.cwd, path.dirname(fp)) : shortPath(path.dirname(fp));
+      const inside = summary.relativeIn(s.cwd, fp);
+      const rel = inside !== null ? inside.split(/[\\/]/).slice(0, -1).join('/') : shortPath(path.dirname(fp));
       it.description = `${rel ? rel + ' · ' : ''}${f.count}× ${[...f.tools].join('/')}`;
       it.resourceUri = vscode.Uri.file(fp);
       it.tooltip = `${fp}\n${f.count} change(s)${fs.existsSync(fp) ? '' : '\n(file no longer exists)'}\n\nClick to open the file`;
