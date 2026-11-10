@@ -50,6 +50,8 @@ jobs:
           VSIX=$(ls *.vsix)
           NOTES=$(awk -v v="## ${GITHUB_REF_NAME#v}" '$0==v{f=1;next} /^## /{f=0} f' CHANGELOG.md)
           if [ -z "$NOTES" ]; then NOTES="See CHANGELOG.md"; fi
+          # Re-running a release skips steps that already succeeded.
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then echo "Release $GITHUB_REF_NAME already exists"; exit 0; fi
           gh release create "$GITHUB_REF_NAME" "$VSIX" \
             --title "$GITHUB_REF_NAME" \
             --notes "$NOTES
@@ -58,8 +60,8 @@ jobs:
           \`code --install-extension $VSIX\`"
 
       - name: Publish to VS Code Marketplace (Trusted Publishing)
-        run: npx --yes @vscode/vsce@4.1.0 publish --oidc --packagePath *.vsix
+        run: npx --yes @vscode/vsce@4.1.0 publish --oidc --skip-duplicate --packagePath *.vsix
 
       # No OVSX_PAT here on purpose: a stored token would override trusted publishing.
       - name: Publish to Open VSX (Trusted Publishing)
-        run: npx --yes ovsx@1.3.0 publish *.vsix --trusted-publishing
+        run: npx --yes ovsx@1.3.0 publish *.vsix --trusted-publishing --skip-duplicate
