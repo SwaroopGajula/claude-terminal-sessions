@@ -144,7 +144,7 @@ A **Running** group at the top shows every Claude Code session that is open righ
 - **Needs your input:** when a session starts waiting for you (for example a permission question), you get an alert with
   **Show Terminal** and **Open Conversation**, even if you are working in another project or window
 - **Agent finished:** when an agent started by a running session finishes, with **Open Agent** to read its answer
-- No alert when you are already looking at that session's terminal, and only one alert per event across all VS Code windows
+- Needs-input alerts are skipped while you are typing in that session's terminal; every alert shows in only one VS Code window
 - Turn them off with `claudeSessions.notifyNeedsInput` and `claudeSessions.notifyAgentDone`
 
 ### Context size

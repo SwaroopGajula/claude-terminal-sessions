@@ -1480,9 +1480,14 @@ function activate(context) {
   notify.cleanMarkers();
   const alertCfg = (k) => vscode.workspace.getConfiguration('claudeSessions').get(k, true);
   const sessionById = (id) => provider.allSessions().find((x) => x.id === id) || loadSessions().find((x) => x.id === id);
-  // Don't alert about a session whose terminal you are looking at right now.
+  // Don't alert about a session whose terminal you are looking at right now. VS Code keeps a terminal
+  // "active" after you click back into a file, so editor activity in the last 20 seconds means you are not.
+  let lastEditorActivity = 0;
+  const touch = () => { lastEditorActivity = Date.now(); };
+  context.subscriptions.push(vscode.window.onDidChangeTextEditorSelection(touch), vscode.window.onDidChangeActiveTextEditor(touch));
   const watching = async (pid) => {
     if (!vscode.window.state.focused || !vscode.window.activeTerminal) return null;
+    if (Date.now() - lastEditorActivity < 20000) return null;
     const t = await findTerminal(pid);
     return t && t === vscode.window.activeTerminal ? t : null;
   };
@@ -1507,8 +1512,7 @@ function activate(context) {
       const s = sessionById(sid);
       if (!s) continue;
       for (const a of notify.newlyFinished(knownAgents, sid, agents.listAgents(s.file, s.id), activatedAt)) {
-        if (!notify.claimOnce(`agent|${sid}|${a.id}`)) continue;
-        if (await watching(e.pid)) continue;
+        if (!notify.claimOnce(`agent|${sid}|${a.id}`)) continue; // background work: always worth a heads-up
         const term = await findTerminal(e.pid);
         const act = agents.agentActivity(a) || {};
         vscode.window.showInformationMessage(
