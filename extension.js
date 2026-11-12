@@ -11,6 +11,7 @@ const marks = require('./marks');
 const search = require('./search');
 const usage = require('./usage');
 const shell = require('./shell');
+const agents = require('./agents');
 
 const { CLAUDE_DIR } = require('./paths');
 const PROJECTS_DIR = path.join(CLAUDE_DIR, 'projects');
@@ -150,16 +151,17 @@ function parseDetails(s) {
   push('');
   push(`- **Folder:** \`${s.cwd}\``);
   if (s.gitBranch) push(`- **Branch:** \`${s.gitBranch}\``);
-  push(`- **Session ID:** \`${s.id}\``);
+  push(`- **${s.isAgent ? 'Agent' : 'Session'} ID:** \`${s.id}\``);
+  if (s.isAgent) push(`- **Part of session:** ${s.parent.title} (\`${s.parent.id}\`)`);
   push(`- **Started:** ${s.created.toLocaleString()}  ·  **Updated:** ${s.updated.toLocaleString()}`);
-  push(`- **Resume:** \`${resumeCommand(s)}\``);
+  if (!s.isAgent) push(`- **Resume:** \`${resumeCommand(s)}\``);
   push('');
 
   for (const line of raw.split('\n')) {
     if (!line || (!line.startsWith('{"parentUuid"') && !line.includes('"type":"user"') && !line.includes('"type":"assistant"'))) continue;
     let o;
     try { o = JSON.parse(line); } catch { continue; }
-    if ((o.type !== 'user' && o.type !== 'assistant') || o.isSidechain || !o.message) continue;
+    if ((o.type !== 'user' && o.type !== 'assistant') || (o.isSidechain && !s.isAgent) || !o.message) continue;
     if (o.uuid) { if (seen.has(o.uuid)) continue; seen.add(o.uuid); }
     const time = o.timestamp ? new Date(o.timestamp) : null;
 
@@ -355,6 +357,11 @@ class SessionsProvider {
   async setMarks(map) { await this.state.update(MARKS_KEY, map); this._em.fire(); }
   get showArchived() { return !!(this.state && this.state.get(SHOW_ARCHIVED_KEY)); }
   get filtering() { return !!(this.filter || this.contentFilter); }
+  // Agents of a session with their status (running only while the session itself is open).
+  agentsOf(s) {
+    const open = this.running.has(s.id);
+    return agents.listAgents(s.file, s.id).map((a) => ({ ...a, status: agents.status(a, open) }));
+  }
   isArchived(s) {
     const autoDays = vscode.workspace.getConfiguration('claudeSessions').get('autoArchiveDays', 0);
     return marks.isArchived(s, this.marks()[s.id], { autoDays, hasFollowup: !!this.followups()[s.id] });
@@ -425,6 +432,14 @@ class SessionsProvider {
       kids.push(m.labels
         ? { kind: 'action', s, label: 'Labels', icon: 'tag', cmd: 'claudeSessions.setLabels', desc: m.labels.map((l) => `#${l}`).join(' ') }
         : { kind: 'action', s, label: 'Add labels…', icon: 'tag', cmd: 'claudeSessions.setLabels', desc: 'e.g. #bug #feature' });
+      const ags = this.agentsOf(s);
+      if (ags.length) {
+        const runningN = ags.filter((a) => a.status === 'running').length;
+        // Running agents first, then newest first.
+        const items = [...ags].sort((x, y) => (y.status === 'running') - (x.status === 'running') || (y.started || 0) - (x.started || 0)).map((a) => ({ kind: 'agent', s, a }));
+        kids.push({ kind: 'section', s, label: 'Agents', icon: 'hubot', items, expanded: runningN > 0,
+          descOverride: runningN ? `${runningN} running · ${ags.length} total` : String(ags.length) });
+      }
       kids.push({ kind: 'info', s, label: 'Folder', icon: 'folder', value: shortPath(s.cwd), cmd: 'claudeSessions.openFolder' });
       if (s.gitBranch) kids.push({ kind: 'info', s, label: 'Branch', icon: 'git-branch', value: s.gitBranch });
       kids.push({ kind: 'info', s, label: 'Session ID', icon: 'key', value: s.id, cmd: 'claudeSessions.copyId' });
@@ -477,7 +492,8 @@ class SessionsProvider {
         const st = el.items.map((s) => this.running.get(s.id).status);
         const waiting = st.filter((x) => x === 'waiting').length;
         const busy = st.filter((x) => x === 'busy').length;
-        it.description = [waiting && `${waiting} need${waiting === 1 ? 's' : ''} input`, busy && `${busy} working`, `${el.items.length} open`].filter(Boolean).join(' · ');
+        const agentCount = el.items.reduce((n, s) => n + this.agentsOf(s).filter((a) => a.status === 'running').length, 0);
+        it.description = [waiting && `${waiting} need${waiting === 1 ? 's' : ''} input`, busy && `${busy} working`, `${el.items.length} open`, agentCount && `🤖 ${agentCount} agent${agentCount === 1 ? '' : 's'}`].filter(Boolean).join(' · ');
         it.iconPath = new vscode.ThemeIcon('pulse', waiting ? new vscode.ThemeColor('charts.orange') : new vscode.ThemeColor('charts.green'));
       }
       it.contextValue = `group-${el.special}`;
@@ -504,6 +520,9 @@ class SessionsProvider {
     const parts = [];
     if (m.labels) parts.push(m.labels.map((l) => `#${l}`).join(' '));
     if (run) parts.push(run.status === 'waiting' && run.waitingFor ? `${running.STATUS_LABEL.waiting}: ${run.waitingFor}` : running.STATUS_LABEL[run.status]);
+    const ags = this.agentsOf(s);
+    const agentsRunning = ags.filter((a) => a.status === 'running').length;
+    if (agentsRunning) parts.push(`🤖 ${agentsRunning} agent${agentsRunning === 1 ? '' : 's'} running`);
     if (fu) parts.push(`⏰ ${followups.describeDue(fu.due)}`);
     if (el.groupBy !== 'folder' || el.special) parts.push(path.basename(s.cwd));
     if (!run) parts.push(relTime(s.updated));
@@ -546,6 +565,10 @@ class SessionsProvider {
       md.appendMarkdown(`\n\n$(graph) ${showCost() ? `**${costLabel(u)}** at API rates · ` : ''}${usage.formatTokens(u.output)} output · ${usage.formatTokens(u.input + u.cacheWrite5m + u.cacheWrite1h)} input · ${usage.formatTokens(u.cacheRead)} cache reads · ${models}`);
     }
     if (run) md.appendMarkdown(`\n\n$(pulse) **${running.STATUS_LABEL[run.status]}**${run.waitingFor ? ` (${mdEscape(run.waitingFor)})` : ''} · process ${run.pid}`);
+    if (ags.length) {
+      md.appendMarkdown(`\n\n$(hubot) **${ags.length} agent${ags.length === 1 ? '' : 's'}**${agentsRunning ? `, ${agentsRunning} running` : ''}`);
+      for (const a of ags.filter((x) => x.status === 'running').slice(0, 5)) md.appendMarkdown(`\n\n$(sync) ${mdEscape(a.description)}`);
+    }
     if (m.pinned) md.appendMarkdown('\n\n$(pinned) Pinned');
     if (archived) md.appendMarkdown(`\n\n$(archive) Archived${m.archivedAt ? ` on ${new Date(m.archivedAt).toLocaleDateString()}` : ' automatically (idle)'}`);
     if (m.labels) md.appendMarkdown(`\n\n$(tag) ${m.labels.map((l) => `\`#${l}\``).join(' ')}`);
@@ -602,6 +625,33 @@ function childItem(el) {
       it.command = fs.existsSync(fp)
         ? { command: 'vscode.open', title: 'Open file', arguments: [vscode.Uri.file(fp)] }
         : { command: 'claudeSessions.openConversation', title: 'Open', arguments: [el, f.line] };
+      break;
+    }
+    case 'agent': {
+      const { a } = el;
+      const act = agents.agentActivity(a) || {};
+      const u = act.usage ? usageSummary([{ usage: act.usage }]) : null;
+      const end = a.status === 'running' ? new Date() : act.last;
+      it = new vscode.TreeItem(a.description, None);
+      const doing = a.status === 'running' && act.lastAction ? act.lastAction : a.type;
+      it.description = [agents.STATUS_LABEL[a.status], doing, agents.duration(act.started, end), u && showCost() && u.cost >= 0.01 ? usage.formatCost(u.cost) : ''].filter(Boolean).join(' · ');
+      it.iconPath = a.status === 'running' ? new vscode.ThemeIcon('sync~spin', new vscode.ThemeColor('charts.blue'))
+        : a.status === 'done' ? new vscode.ThemeIcon('pass', new vscode.ThemeColor('charts.green'))
+          : new vscode.ThemeIcon('circle-slash', new vscode.ThemeColor('disabledForeground'));
+      const md = new vscode.MarkdownString(undefined, true);
+      md.isTrusted = false;
+      md.appendMarkdown(`**${mdEscape(a.description)}**\n\n`);
+      md.appendMarkdown(`$(hubot) ${mdEscape(a.type)}${a.model ? ` · ${mdEscape(a.model)}` : ''} · ${a.background ? 'background' : 'foreground'} · **${agents.STATUS_LABEL[a.status]}**`);
+      if (a.status === 'stopped') md.appendMarkdown(' (the session ended before the agent finished)');
+      if (act.started) md.appendMarkdown(`\n\n$(clock) Started ${fmtTime(act.started)} · ${a.status === 'running' ? 'running for' : 'took'} ${agents.duration(act.started, end)}`);
+      if (act.toolCalls) md.appendMarkdown(`\n\n$(tools) ${act.toolCalls} tool call${act.toolCalls === 1 ? '' : 's'}${act.lastAction ? ` · last: ${mdEscape(act.lastAction)}${act.lastActionTime ? ` (${relTime(act.lastActionTime)})` : ''}` : ''}`);
+      if (u && u.requests) md.appendMarkdown(`\n\n$(graph) ${showCost() ? `${costLabel(u)} at API rates · ` : ''}${usage.formatTokens(u.output)} output`);
+      if (act.prompt) md.appendMarkdown(`\n\n---\n\n**Task:** ${mdEscape(truncate(act.prompt.replace(/\s+/g, ' '), 500))}`);
+      if (a.status === 'done' && act.result) md.appendMarkdown(`\n\n**Result:** ${mdEscape(truncate(act.result.replace(/\s+/g, ' '), 400))}`);
+      md.appendMarkdown('\n\n_Click to open the agent\'s conversation_');
+      it.tooltip = md;
+      it.contextValue = 'sessionAgent';
+      it.command = { command: 'claudeSessions.openAgent', title: 'Open agent', arguments: [el] };
       break;
     }
     case 'cmd': {
@@ -1203,6 +1253,17 @@ function activate(context) {
     const s = sessionFrom(arg, provider, view);
     if (s) openConversation(s, typeof line === 'number' ? line : 0);
   });
+  reg('claudeSessions.openAgent', (arg) => {
+    if (!arg || !arg.a) return;
+    const { a, s } = arg;
+    const act = agents.agentActivity(a) || {};
+    const started = act.started || a.started || s.created;
+    openConversation({
+      id: a.id, file: a.file, title: `Agent: ${a.description}`, cwd: s.cwd, gitBranch: s.gitBranch,
+      created: started, updated: act.last || a.lastWrite || started, isAgent: true, parent: s,
+    }, 0);
+  });
+
   reg('claudeSessions.copyShellCommand', async (arg) => {
     if (!arg || !arg.c) return;
     await vscode.env.clipboard.writeText(arg.c.cmd);
@@ -1352,6 +1413,12 @@ function activate(context) {
   const bump = () => { clearTimeout(timer); timer = setTimeout(() => provider.refresh(), 1500); };
   const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(PROJECTS_DIR), '*/*.jsonl'));
   watcher.onDidCreate(bump); watcher.onDidChange(bump); watcher.onDidDelete(bump);
+  // Agents write to <session>/subagents/; redraw (no reload) so their status and last action stay current.
+  let agentTimer;
+  const redraw = () => { clearTimeout(agentTimer); agentTimer = setTimeout(() => provider._em.fire(), 2000); };
+  const agentWatcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(PROJECTS_DIR), '*/*/subagents/*'));
+  agentWatcher.onDidCreate(redraw); agentWatcher.onDidChange(redraw); agentWatcher.onDidDelete(redraw);
+  context.subscriptions.push(agentWatcher, { dispose: () => clearTimeout(agentTimer) });
   context.subscriptions.push(watcher, { dispose: () => clearTimeout(timer) });
   // Live status: Claude Code rewrites ~/.claude/sessions/<pid>.json when a session starts, stops or changes status.
   let runTimer;

@@ -140,6 +140,24 @@ A **Running** group at the top shows every Claude Code session that is open righ
 - The status bar shows how many sessions need your input; click it to jump to them
 - Resuming a session that is already open warns you, and offers to **show its terminal** (if it runs in VS Code) or **fork** it instead
 
+### See what agents are doing
+When Claude starts agents (the Agent / Task tool, e.g. to explore code or run work in parallel), you can follow them:
+
+- The session's row shows **🤖 2 agents running**, and the **Running** group counts all running agents
+- Expand a session to see its **Agents** section, running agents first:
+
+```
+▾ 🤖 Agents                               1 running · 3 total
+    🔄 Write toggle tests                 Running · Run the toggle tests · 1m 20s · $0.12
+    ✅ Find theme files                    Done · Explore · 25s · $0.03
+    ⊘ Check bundle size                   Stopped · general-purpose · 2m 5s
+```
+
+- **Running** agents show what they are doing right now (their latest step), for how long, and what they cost so far
+- **Done** agents show how long they took; hover to see their task and the result they handed back
+- **Stopped** means the session was closed before the agent finished
+- Click an agent to open its own conversation: its task, every step, and its answer
+
 ### Fork a session
 Right-click → **Fork Session** (or *Fork session* inside an expanded session) starts a new copy of the conversation with the full
 context (`claude --resume <id> --fork-session`). The original is left untouched, which is handy for trying a different approach.
@@ -311,7 +329,7 @@ Search **Claude Terminal Sessions** in the Extensions panel (it comes from [Open
 **From a `.vsix` file**
 
 ```bash
-code --install-extension claude-terminal-sessions-0.8.0.vsix
+code --install-extension claude-terminal-sessions-0.9.0.vsix
 ```
 
 or in VS Code: **Extensions** panel → `···` menu → **Install from VSIX…**
@@ -350,7 +368,7 @@ npm run package   # builds claude-terminal-sessions-<version>.vsix
 code --install-extension claude-terminal-sessions-*.vsix
 ```
 
-There is no build step and there are no runtime dependencies. `extension.js` is the UI; the logic lives in plain JavaScript modules that are tested without VS Code: `share.js` (export/import), `running.js`, `followups.js`, `summary.js`, `marks.js` (pins, notes, labels, archive), `search.js`, `usage.js` (tokens and cost) and `shell.js` (command lines per shell). CI runs the tests on Linux, Windows and macOS.
+There is no build step and there are no runtime dependencies. `extension.js` is the UI; the logic lives in plain JavaScript modules that are tested without VS Code: `share.js` (export/import), `running.js`, `followups.js`, `summary.js`, `marks.js` (pins, notes, labels, archive), `search.js`, `usage.js` (tokens and cost), `shell.js` (command lines per shell) and `agents.js` (subagents). CI runs the tests on Linux, Windows and macOS.
 
 ### Demo data for screenshots
 `node scripts/demo.js` creates invented sessions in `~/claude-demo` and opens a separate VS Code window that shows only them,

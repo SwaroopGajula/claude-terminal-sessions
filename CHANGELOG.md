@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.9.0
+- **Agents.** See the agents (Agent / Task tool) each session started: a count of running agents on the session row and in the *Running* group, and an *Agents* section with each agent's task, status (running, done or stopped), latest step, duration, model and cost. Hover for the task and the result it handed back; click to open the agent's own conversation. Updates live while agents work.
+
 ## 0.8.0
 - **Rename sessions** from the right-click menu or with **F2**. The name is stored by the extension; Claude Code's own title is unchanged, shown on hover and still searchable.
 - **Windows support:** *Copy Resume Command* uses your default shell's syntax (PowerShell, Command Prompt, Git Bash, bash/zsh, fish); finding the terminal of a running session works on Windows; deleted sessions go to the Recycle Bin; importing a session exported on another OS converts path separators.
