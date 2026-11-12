@@ -140,6 +140,20 @@ A **Running** group at the top shows every Claude Code session that is open righ
 - The status bar shows how many sessions need your input; click it to jump to them
 - Resuming a session that is already open warns you, and offers to **show its terminal** (if it runs in VS Code) or **fork** it instead
 
+### Alerts when Claude needs you
+- **Needs your input:** when a session starts waiting for you (for example a permission question), you get an alert with
+  **Show Terminal** and **Open Conversation**, even if you are working in another project or window
+- **Agent finished:** when an agent started by a running session finishes, with **Open Agent** to read its answer
+- No alert when you are already looking at that session's terminal, and only one alert per event across all VS Code windows
+- Turn them off with `claudeSessions.notifyNeedsInput` and `claudeSessions.notifyAgentDone`
+
+### Context size
+Running sessions show how much context Claude saw on its latest reply, e.g. `Working · context 245K (25%)`:
+
+- Hover (or the **Token usage** section) shows the size against the model's limit, how often the session was compacted, and the
+  range at which Claude Code has compacted **your** sessions before, e.g. *usually compacts your sessions at 210K–590K*
+- **⚠** marks a session near that range or above 80% of the limit: a good moment for `/compact` or a fresh session
+
 ### See what agents are doing
 When Claude starts agents (the Agent / Task tool, e.g. to explore code or run work in parallel), you can follow them:
 
@@ -329,7 +343,7 @@ Search **Claude Terminal Sessions** in the Extensions panel (it comes from [Open
 **From a `.vsix` file**
 
 ```bash
-code --install-extension claude-terminal-sessions-0.9.0.vsix
+code --install-extension claude-terminal-sessions-0.10.0.vsix
 ```
 
 or in VS Code: **Extensions** panel → `···` menu → **Install from VSIX…**
@@ -348,6 +362,8 @@ Start VS Code from a terminal where the variable is set (e.g. `code .`), so the 
 | `claudeSessions.maxSessions` | `300` | Maximum number of sessions to show |
 | `claudeSessions.showCost` | `true` | Show the estimated cost (API list prices) on rows, in details and in the daily summary |
 | `claudeSessions.modelPricing` | `{}` | Override or add model prices in US$ per million tokens |
+| `claudeSessions.notifyNeedsInput` | `true` | Alert when a session starts waiting for your input |
+| `claudeSessions.notifyAgentDone` | `true` | Alert when an agent of a running session finishes |
 | `claudeSessions.autoArchiveDays` | `0` | Hide sessions not used for this many days (`0` = off). Pinned and followed-up sessions are kept |
 
 ## Privacy
@@ -368,7 +384,7 @@ npm run package   # builds claude-terminal-sessions-<version>.vsix
 code --install-extension claude-terminal-sessions-*.vsix
 ```
 
-There is no build step and there are no runtime dependencies. `extension.js` is the UI; the logic lives in plain JavaScript modules that are tested without VS Code: `share.js` (export/import), `running.js`, `followups.js`, `summary.js`, `marks.js` (pins, notes, labels, archive), `search.js`, `usage.js` (tokens and cost), `shell.js` (command lines per shell) and `agents.js` (subagents). CI runs the tests on Linux, Windows and macOS.
+There is no build step and there are no runtime dependencies. `extension.js` is the UI; the logic lives in plain JavaScript modules that are tested without VS Code: `share.js` (export/import), `running.js`, `followups.js`, `summary.js`, `marks.js` (pins, notes, labels, archive), `search.js`, `usage.js` (tokens and cost), `shell.js` (command lines per shell), `agents.js` (subagents) and `notify.js` (alerts). CI runs the tests on Linux, Windows and macOS.
 
 ### Demo data for screenshots
 `node scripts/demo.js` creates invented sessions in `~/claude-demo` and opens a separate VS Code window that shows only them,

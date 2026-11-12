@@ -79,6 +79,13 @@ function priceFor(model, overrides = {}) {
   return out;
 }
 
+// Context window per model (tokens). Haiku 4.5 has 200K; the other current models have 1M.
+function contextWindow(model) {
+  const base = String(model || '').replace(/:fast$/, '').replace(/\[1m\]$/, '').replace(/-\d{8}$/, '');
+  if (!PRICES[base]) return null;
+  return base === 'claude-haiku-4-5' ? 200000 : 1000000;
+}
+
 function costOf(tokens, price) {
   return KINDS.reduce((sum, k) => sum + (tokens[k] || 0) * price[k], 0) / 1e6;
 }
@@ -108,7 +115,7 @@ function summarize(usages, { fromKey, toKey, overrides } = {}) {
 
 function formatTokens(n) {
   if (n >= 1e9) return `${(n / 1e9).toFixed(n >= 1e10 ? 0 : 1)}B`;
-  if (n >= 1e6) return `${(n / 1e6).toFixed(n >= 1e7 ? 0 : 1)}M`;
+  if (n >= 1e6) return `${(n / 1e6).toFixed(n >= 1e7 ? 0 : 1).replace(/\.0$/, '')}M`;
   if (n >= 1e3) return `${(n / 1e3).toFixed(n >= 1e4 ? 0 : 1)}K`;
   return String(n);
 }
@@ -170,4 +177,4 @@ function buildReport(entries, { label = 'All time', fromKey, toKey, overrides } 
   return L.join('\n') + '\n';
 }
 
-module.exports = { buildReport, PRICES, createCollector, priceFor, costOf, summarize, formatTokens, formatCost, dayKey };
+module.exports = { contextWindow, buildReport, PRICES, createCollector, priceFor, costOf, summarize, formatTokens, formatCost, dayKey };

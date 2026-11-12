@@ -2,7 +2,7 @@
   "name": "claude-terminal-sessions",
   "displayName": "Claude Terminal Sessions",
   "description": "Claude Code session manager: every terminal session from every folder in one sidebar. Search inside conversations, see running agents, token usage and cost, resume, fork, pin, label, archive, share, follow-up reminders and daily summaries.",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "publisher": "SwaroopGajula",
   "license": "MIT",
   "repository": {
@@ -49,7 +49,7 @@
     "onStartupFinished"
   ],
   "scripts": {
-    "lint": "node --check extension.js && node --check share.js && node --check running.js && node --check followups.js && node --check summary.js && node --check marks.js && node --check search.js && node --check paths.js && node --check usage.js && node --check shell.js && node --check agents.js",
+    "lint": "node --check extension.js && node --check share.js && node --check running.js && node --check followups.js && node --check summary.js && node --check marks.js && node --check search.js && node --check paths.js && node --check usage.js && node --check shell.js && node --check agents.js && node --check notify.js",
     "test": "node --test test/*.test.js",
     "package": "npx --yes @vscode/vsce@4.1.0 package"
   },
@@ -576,6 +576,16 @@
               }
             }
           }
+        },
+        "claudeSessions.notifyNeedsInput": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show an alert when a Claude Code session starts waiting for your input (for example a permission question). Skipped when you are already looking at that session's terminal."
+        },
+        "claudeSessions.notifyAgentDone": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show an alert when an agent started by a running Claude Code session finishes."
         }
       }
     },

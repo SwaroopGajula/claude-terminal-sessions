@@ -12,6 +12,7 @@ const search = require('./search');
 const usage = require('./usage');
 const shell = require('./shell');
 const agents = require('./agents');
+const notify = require('./notify');
 
 const { CLAUDE_DIR } = require('./paths');
 const PROJECTS_DIR = path.join(CLAUDE_DIR, 'projects');
@@ -57,13 +58,16 @@ function parseSession(file) {
     userMessages: 0,
     created: null,
     updated: null,
+    context: null, // { tokens, model, time } of the latest reply
+    compactions: [], // [{ pre, post, trigger, time }]
   };
   const col = usage.createCollector();
   for (const line of raw.split('\n')) {
     if (!line) continue;
     // Cheap pre-filter: skip huge lines we don't care about.
     if (!line.includes('"type":"user"') && !line.includes('"type":"assistant"') &&
-        !line.includes('title"') && !line.includes('"type":"summary"') && !line.includes('"type":"last-prompt"')) continue;
+        !line.includes('title"') && !line.includes('"type":"summary"') && !line.includes('"type":"last-prompt"') &&
+        !line.includes('"compact_boundary"')) continue;
     let o;
     try { o = JSON.parse(line); } catch { continue; }
     switch (o.type) {
@@ -71,9 +75,25 @@ function parseSession(file) {
       case 'ai-title': s.aiTitle = o.aiTitle || s.aiTitle; break;
       case 'summary': s.summary = o.summary || s.summary; break;
       case 'last-prompt': s.lastPrompt = cleanPrompt(o.lastPrompt) || s.lastPrompt; break;
+      case 'system':
+        if (o.subtype === 'compact_boundary' && o.compactMetadata) {
+          s.compactions.push({ pre: o.compactMetadata.preTokens || 0, post: o.compactMetadata.postTokens || 0, trigger: o.compactMetadata.trigger || '', time: o.timestamp ? new Date(o.timestamp) : null });
+        }
+        break;
       case 'user':
       case 'assistant': {
-        if (o.type === 'assistant') col.add(o);
+        if (o.type === 'assistant') {
+          col.add(o);
+          // Size of the conversation Claude saw on its latest reply (main conversation only, not agents).
+          const u = o.message && o.message.usage;
+          if (u && !o.isSidechain && o.message.model !== '<synthetic>') {
+            s.context = {
+              tokens: (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.output_tokens || 0),
+              model: o.message.model,
+              time: o.timestamp ? new Date(o.timestamp) : null,
+            };
+          }
+        }
         if (o.cwd && !s.cwd) s.cwd = o.cwd;
         if (o.gitBranch && o.gitBranch !== 'HEAD') s.gitBranch = o.gitBranch;
         if (o.timestamp) {
@@ -332,6 +352,30 @@ function usageSummary(sessions, range = {}) {
 const showCost = () => usageConfig().get('showCost', true);
 const costLabel = (u) => `≈ ${usage.formatCost(u.cost)}${u.unpriced.length ? '+' : ''}`;
 
+// ---------- context ----------
+
+let compactRange = null; // { min, max, n }: sizes at which Claude Code auto-compacted, across all sessions
+function updateCompactRange(list) {
+  const sizes = list.flatMap((s) => (s.compactions || []).filter((c) => c.trigger === 'auto' && c.pre).map((c) => c.pre));
+  compactRange = sizes.length ? { min: Math.min(...sizes), max: Math.max(...sizes), n: sizes.length } : null;
+}
+function contextInfo(s) {
+  if (!s.context || !s.context.tokens) return null;
+  const window = usage.contextWindow(s.context.model);
+  return { ...s.context, window, pct: window ? Math.round((s.context.tokens * 100) / window) : null };
+}
+// Warn when the context nears the model's limit or the smallest size Claude Code has auto-compacted at.
+const contextHigh = (c) => (c.pct !== null && c.pct >= 80) || (compactRange && c.tokens >= compactRange.min * 0.9);
+const contextShort = (c) => `${contextHigh(c) ? '⚠ ' : ''}context ${usage.formatTokens(c.tokens)}${c.pct !== null ? ` (${c.pct}%)` : ''}`;
+function contextLong(c, s) {
+  const T = usage.formatTokens;
+  const parts = [`Context ${T(c.tokens)}${c.window ? ` of ${T(c.window)} (${c.pct}%)` : ''} on the latest reply`];
+  const n = (s.compactions || []).length;
+  if (n) parts.push(`compacted ${n}× in this session, last at ${T(s.compactions[n - 1].pre)}`);
+  if (compactRange) parts.push(`Claude Code usually compacts your sessions at ${T(compactRange.min)}–${T(compactRange.max)}`);
+  return parts.join(' · ');
+}
+
 // ---------- tree ----------
 
 const FOLLOWUPS_KEY = 'claudeSessions.followups';
@@ -350,7 +394,11 @@ class SessionsProvider {
     this.refreshRunning();
   }
   refresh() { this.sessions = []; this.refreshRunning(); this._em.fire(); }
-  refreshRunning() { this.running = running.readRunning(); }
+  refreshRunning() {
+    const prev = this.running;
+    this.running = running.readRunning();
+    if (prev && this.onRunningChange) this.onRunningChange(prev, this.running);
+  }
   followups() { return (this.state && this.state.get(FOLLOWUPS_KEY)) || {}; }
   async setFollowups(map) { await this.state.update(FOLLOWUPS_KEY, map); this._em.fire(); }
   marks() { return (this.state && this.state.get(MARKS_KEY)) || {}; }
@@ -371,6 +419,7 @@ class SessionsProvider {
     if (!this.sessions.length) {
       const max = vscode.workspace.getConfiguration('claudeSessions').get('maxSessions', 300);
       this.sessions = loadSessions().slice(0, max);
+      updateCompactRange(this.sessions);
     }
     return this.sessions;
   }
@@ -456,6 +505,8 @@ class SessionsProvider {
         rows.push({ kind: 'info', s, label: 'Output tokens', icon: 'arrow-down', value: T(u.output) });
         rows.push({ kind: 'info', s, label: 'Input tokens', icon: 'arrow-up', value: `${T(u.input)} new · ${T(u.cacheWrite5m + u.cacheWrite1h)} cache writes` });
         rows.push({ kind: 'info', s, label: 'Cache reads', icon: 'database', value: T(u.cacheRead) });
+        const ctx = contextInfo(s);
+        if (ctx) rows.push({ kind: 'info', s, label: 'Context', icon: contextHigh(ctx) ? 'warning' : 'symbol-ruler', value: `${T(ctx.tokens)}${ctx.window ? ` of ${T(ctx.window)} (${ctx.pct}%)` : ''}${s.compactions.length ? ` · compacted ${s.compactions.length}×` : ''}` });
         for (const [model, bm] of Object.entries(u.byModel).sort((a, b) => b[1].cost - a[1].cost)) {
           rows.push({ kind: 'info', s, label: model, icon: 'hubot', value: `${bm.requests} requests · ${T(bm.output)} output${showCost() ? ` · ${usage.formatCost(bm.cost)}` : ''}` });
         }
@@ -523,6 +574,8 @@ class SessionsProvider {
     const ags = this.agentsOf(s);
     const agentsRunning = ags.filter((a) => a.status === 'running').length;
     if (agentsRunning) parts.push(`🤖 ${agentsRunning} agent${agentsRunning === 1 ? '' : 's'} running`);
+    const ctx = contextInfo(s);
+    if (run && ctx) parts.push(contextShort(ctx));
     if (fu) parts.push(`⏰ ${followups.describeDue(fu.due)}`);
     if (el.groupBy !== 'folder' || el.special) parts.push(path.basename(s.cwd));
     if (!run) parts.push(relTime(s.updated));
@@ -565,6 +618,7 @@ class SessionsProvider {
       md.appendMarkdown(`\n\n$(graph) ${showCost() ? `**${costLabel(u)}** at API rates · ` : ''}${usage.formatTokens(u.output)} output · ${usage.formatTokens(u.input + u.cacheWrite5m + u.cacheWrite1h)} input · ${usage.formatTokens(u.cacheRead)} cache reads · ${models}`);
     }
     if (run) md.appendMarkdown(`\n\n$(pulse) **${running.STATUS_LABEL[run.status]}**${run.waitingFor ? ` (${mdEscape(run.waitingFor)})` : ''} · process ${run.pid}`);
+    if (ctx) md.appendMarkdown(`\n\n$(${contextHigh(ctx) ? 'warning' : 'symbol-ruler'}) ${contextLong(ctx, s)}${run && contextHigh(ctx) ? '. Consider `/compact` or a fresh session.' : ''}`);
     if (ags.length) {
       md.appendMarkdown(`\n\n$(hubot) **${ags.length} agent${ags.length === 1 ? '' : 's'}**${agentsRunning ? `, ${agentsRunning} running` : ''}`);
       for (const a of ags.filter((x) => x.status === 'running').slice(0, 5)) md.appendMarkdown(`\n\n$(sync) ${mdEscape(a.description)}`);
@@ -1415,11 +1469,65 @@ function activate(context) {
   watcher.onDidCreate(bump); watcher.onDidChange(bump); watcher.onDidDelete(bump);
   // Agents write to <session>/subagents/; redraw (no reload) so their status and last action stay current.
   let agentTimer;
-  const redraw = () => { clearTimeout(agentTimer); agentTimer = setTimeout(() => provider._em.fire(), 2000); };
+  const redraw = () => { clearTimeout(agentTimer); agentTimer = setTimeout(() => { provider._em.fire(); checkAgents(); }, 2000); };
   const agentWatcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(PROJECTS_DIR), '*/*/subagents/*'));
   agentWatcher.onDidCreate(redraw); agentWatcher.onDidChange(redraw); agentWatcher.onDidDelete(redraw);
   context.subscriptions.push(agentWatcher, { dispose: () => clearTimeout(agentTimer) });
   context.subscriptions.push(watcher, { dispose: () => clearTimeout(timer) });
+  // ---------- alerts ----------
+  const activatedAt = Date.now();
+  const knownAgents = new Map(); // "sessionId/agentId" -> finished
+  notify.cleanMarkers();
+  const alertCfg = (k) => vscode.workspace.getConfiguration('claudeSessions').get(k, true);
+  const sessionById = (id) => provider.allSessions().find((x) => x.id === id) || loadSessions().find((x) => x.id === id);
+  // Don't alert about a session whose terminal you are looking at right now.
+  const watching = async (pid) => {
+    if (!vscode.window.state.focused || !vscode.window.activeTerminal) return null;
+    const t = await findTerminal(pid);
+    return t && t === vscode.window.activeTerminal ? t : null;
+  };
+
+  const alertWaiting = async (e) => {
+    if (!alertCfg('notifyNeedsInput')) return;
+    if (await watching(e.pid)) return;
+    if (!notify.claimOnce(`wait|${e.sessionId}|${e.updatedAt || ''}|${e.waitingFor || ''}`)) return;
+    const s = sessionById(e.sessionId);
+    const name = (s && s.title) || e.name || path.basename(e.cwd || '') || 'A Claude session';
+    const term = await findTerminal(e.pid);
+    const pick = await vscode.window.showInformationMessage(
+      `🔔 "${truncate(name, 60)}" needs your input${e.waitingFor ? `: ${truncate(e.waitingFor, 80)}` : ''}`,
+      ...(term ? ['Show Terminal'] : []), ...(s ? ['Open Conversation'] : []));
+    if (pick === 'Show Terminal') term.show();
+    if (pick === 'Open Conversation') openConversation(s, 0);
+  };
+
+  const checkAgents = async () => {
+    if (!alertCfg('notifyAgentDone')) return;
+    for (const [sid, e] of provider.running) {
+      const s = sessionById(sid);
+      if (!s) continue;
+      for (const a of notify.newlyFinished(knownAgents, sid, agents.listAgents(s.file, s.id), activatedAt)) {
+        if (!notify.claimOnce(`agent|${sid}|${a.id}`)) continue;
+        if (await watching(e.pid)) continue;
+        const term = await findTerminal(e.pid);
+        const act = agents.agentActivity(a) || {};
+        vscode.window.showInformationMessage(
+          `🤖 Agent finished: "${truncate(a.description, 60)}" in "${truncate(s.title, 40)}"${act.started ? ` (${agents.duration(act.started, act.last)})` : ''}`,
+          'Open Agent', ...(term ? ['Show Terminal'] : []),
+        ).then((pick) => {
+          if (pick === 'Open Agent') vscode.commands.executeCommand('claudeSessions.openAgent', { s, a });
+          if (pick === 'Show Terminal') term.show();
+        });
+      }
+    }
+  };
+
+  provider.onRunningChange = (prev, next) => {
+    for (const e of notify.newlyWaiting(prev, next)) alertWaiting(e);
+    checkAgents();
+  };
+  checkAgents(); // learn which agents are already finished, without alerting
+
   // Live status: Claude Code rewrites ~/.claude/sessions/<pid>.json when a session starts, stops or changes status.
   let runTimer;
   const bumpRunning = () => {
