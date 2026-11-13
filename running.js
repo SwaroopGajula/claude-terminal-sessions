@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { execFileSync } = require('child_process');
+const { execFile } = require('child_process');
 
 const SESSIONS_DIR = path.join(require('./paths').CLAUDE_DIR, 'sessions');
 
@@ -52,32 +52,50 @@ const rank = (e) => RANK[e.status] || 0;
 
 const STATUS_LABEL = { busy: 'Working', waiting: 'Needs input', idle: 'Open' };
 
-function parentPid(pid) {
-  const [p] = ancestorPids(pid, 1);
-  return p || null;
-}
+const run = (cmd, args, timeout) => new Promise((resolve) => {
+  execFile(cmd, args, { encoding: 'utf8', timeout, windowsHide: true }, (err, stdout) => resolve(err ? '' : String(stdout)));
+});
+
+const ancestorCache = new Map(); // "pid:depth" -> Promise<number[]>; a process's parents never change
 
 // Parent, grandparent, ... of a process (up to `depth`). Used to find the VS Code terminal whose shell
 // started Claude Code: on Windows there is often a cmd.exe or node launcher in between.
+// Asynchronous, so a slow lookup (PowerShell on Windows can take several seconds) never blocks VS Code.
 function ancestorPids(pid, depth = 3, platform = process.platform) {
   const n = Math.trunc(Number(pid));
-  if (!Number.isInteger(n) || n <= 0) return [];
-  try {
-    if (platform === 'win32') {
-      const script = `$p=${n}; $o=@(); for($i=0;$i -lt ${depth};$i++){ $q=(Get-CimInstance Win32_Process -Filter "ProcessId=$p").ParentProcessId; if(-not $q){break}; $o+=$q; $p=$q }; $o -join ','`;
-      const out = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8', timeout: 5000, windowsHide: true });
-      return out.trim().split(',').map((x) => parseInt(x, 10)).filter((x) => Number.isInteger(x) && x > 0);
-    }
-    const out = [];
-    let cur = n;
-    for (let i = 0; i < depth; i++) {
-      const p = parseInt(execFileSync('ps', ['-o', 'ppid=', '-p', String(cur)], { encoding: 'utf8', timeout: 2000 }).trim(), 10);
-      if (!Number.isInteger(p) || p <= 1) break;
-      out.push(p);
-      cur = p;
-    }
-    return out;
-  } catch { return []; }
+  if (!Number.isInteger(n) || n <= 0) return Promise.resolve([]);
+  const key = `${n}:${depth}`;
+  if (!ancestorCache.has(key)) {
+    const p = lookup(n, depth, platform).then((list) => {
+      if (!list.length) ancestorCache.delete(key); // don't remember failures
+      return list;
+    });
+    ancestorCache.set(key, p);
+    if (ancestorCache.size > 200) ancestorCache.delete(ancestorCache.keys().next().value);
+  }
+  return ancestorCache.get(key);
+}
+
+async function lookup(n, depth, platform) {
+  if (platform === 'win32') {
+    const script = `$p=${n}; $o=@(); for($i=0;$i -lt ${depth};$i++){ $q=(Get-CimInstance Win32_Process -Filter "ProcessId=$p").ParentProcessId; if(-not $q){break}; $o+=$q; $p=$q }; $o -join ','`;
+    const out = await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], 20000);
+    return out.trim().split(',').map((x) => parseInt(x, 10)).filter((x) => Number.isInteger(x) && x > 0);
+  }
+  const out = [];
+  let cur = n;
+  for (let i = 0; i < depth; i++) {
+    const p = parseInt((await run('ps', ['-o', 'ppid=', '-p', String(cur)], 3000)).trim(), 10);
+    if (!Number.isInteger(p) || p <= 1) break;
+    out.push(p);
+    cur = p;
+  }
+  return out;
+}
+
+async function parentPid(pid) {
+  const [p] = await ancestorPids(pid, 1);
+  return p || null;
 }
 
 module.exports = { SESSIONS_DIR, readRunning, isAlive, parentPid, ancestorPids, STATUS_LABEL, rank };

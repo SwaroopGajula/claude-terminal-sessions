@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.10.2
+- Windows: finding the terminal of a running session no longer freezes VS Code while PowerShell starts (the lookup now runs in the background, allows up to 20 seconds and is remembered).
+
 ## 0.10.1
 - Fix: agents interrupted by closing a session (or quitting VS Code) now show as *Stopped* after the session is resumed, instead of *Running*.
 

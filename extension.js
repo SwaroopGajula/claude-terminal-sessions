@@ -810,7 +810,7 @@ function activate(context) {
   // The VS Code terminal running this Claude process, if any (its shell is the parent process).
   const findTerminal = async (pid) => {
     if (!vscode.window.terminals.length) return null;
-    const family = new Set([pid, ...running.ancestorPids(pid, 3)]);
+    const family = new Set([pid, ...(await running.ancestorPids(pid, 3))]);
     for (const t of vscode.window.terminals) {
       const tp = await t.processId;
       if (tp && family.has(tp)) return t;

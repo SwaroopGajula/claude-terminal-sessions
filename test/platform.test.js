@@ -25,11 +25,13 @@ test('cdAndRun quotes folders for each shell', () => {
   assert.strictEqual(shell.cdAndRun('fish', "/projects/it's", cmd), `cd '/projects/it\\'s' && ${cmd}`);
 });
 
-test('ancestorPids finds this process\'s parent on the current OS', () => {
-  const parents = running.ancestorPids(process.pid, 2);
+// PowerShell on a cold Windows machine can take well over 5 seconds to start.
+test('ancestorPids finds this process\'s parent on the current OS', { timeout: 60000 }, async () => {
+  const parents = await running.ancestorPids(process.pid, 2);
   assert.ok(parents.length >= 1, `expected a parent, got ${JSON.stringify(parents)}`);
   assert.ok(parents.includes(process.ppid), `expected ${process.ppid} in ${JSON.stringify(parents)}`);
-  assert.deepStrictEqual(running.ancestorPids('nope'), []);
+  assert.deepStrictEqual(await running.ancestorPids('nope'), []);
+  assert.strictEqual(await running.ancestorPids(process.pid, 2), parents, 'second lookup is served from the cache');
 });
 
 test('import rewrites paths with the new computer\'s separator', () => {

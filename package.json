@@ -2,7 +2,7 @@
   "name": "claude-terminal-sessions",
   "displayName": "Claude Terminal Sessions",
   "description": "Claude Code session manager: every terminal session from every folder in one sidebar. Search inside conversations, see running agents, token usage and cost, resume, fork, pin, label, archive, share, follow-up reminders and daily summaries.",
-  "version": "0.10.1",
+  "version": "0.10.2",
   "publisher": "SwaroopGajula",
   "license": "MIT",
   "repository": {
