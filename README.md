@@ -343,7 +343,7 @@ Search **Claude Terminal Sessions** in the Extensions panel (it comes from [Open
 **From a `.vsix` file**
 
 ```bash
-code --install-extension claude-terminal-sessions-0.10.0.vsix
+code --install-extension claude-terminal-sessions-0.10.1.vsix
 ```
 
 or in VS Code: **Extensions** panel → `···` menu → **Install from VSIX…**
