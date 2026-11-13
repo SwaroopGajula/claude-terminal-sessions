@@ -28,6 +28,7 @@ function listAgents(sessionFile, sessionId) {
     out.push({
       id,
       file,
+      firstRecord: firstTimestamp(file),
       type: meta.agentType || 'agent',
       description: meta.description || id,
       model: meta.model || meta.pickedEffortModel || '',
@@ -41,10 +42,29 @@ function listAgents(sessionFile, sessionId) {
   return out.sort((a, b) => (a.started || 0) - (b.started || 0));
 }
 
-// running: not finished and its session is still open. stopped: the session ended first.
-function status(agent, sessionRunning) {
+// Time of an agent's first record (when it started), from the start of its transcript.
+function firstTimestamp(file) {
+  let fd;
+  try {
+    fd = fs.openSync(file, 'r');
+    const buf = Buffer.alloc(65536);
+    const n = fs.readSync(fd, buf, 0, buf.length, 0);
+    const line = buf.toString('utf8', 0, n).split('\n')[0];
+    const t = new Date(JSON.parse(line).timestamp);
+    return isNaN(t) ? null : t;
+  } catch { return null; } finally { if (fd !== undefined) fs.closeSync(fd); }
+}
+
+// running: not finished, and started by a Claude process that is still open.
+// stopped: that process ended first (the session was closed, or closed and resumed later in a new process).
+// `session` is the live entry of the session ({ firstStartedAt }) or a boolean, or null when it isn't open.
+function status(agent, session) {
   if (agent.finished) return 'done';
-  return sessionRunning ? 'running' : 'stopped';
+  if (!session) return 'stopped';
+  const processStart = session.firstStartedAt || session.startedAt;
+  const agentStart = agent.firstRecord || agent.started;
+  if (processStart && agentStart && agentStart < processStart - 5000) return 'stopped';
+  return 'running';
 }
 
 const STATUS_LABEL = { running: 'Running', done: 'Done', stopped: 'Stopped' };

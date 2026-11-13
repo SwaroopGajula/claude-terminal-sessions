@@ -169,7 +169,7 @@ When Claude starts agents (the Agent / Task tool, e.g. to explore code or run wo
 
 - **Running** agents show what they are doing right now (their latest step), for how long, and what they cost so far
 - **Done** agents show how long they took; hover to see their task and the result they handed back
-- **Stopped** means the session was closed before the agent finished
+- **Stopped** means the Claude process that started the agent ended first: the session was closed (or VS Code quit) before the agent finished, even if you resumed the session later
 - Click an agent to open its own conversation: its task, every step, and its answer
 
 ### Fork a session

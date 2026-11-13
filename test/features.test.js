@@ -26,6 +26,17 @@ test('readRunning keeps live sessions and the most urgent status', () => {
   assert.strictEqual(m.get('bbb').status, 'busy');
 });
 
+test('readRunning keeps the earliest process start when a session is open twice', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cts-run2-'));
+  const write = (pid, o) => fs.writeFileSync(path.join(dir, `${pid}.json`), JSON.stringify({ pid, ...o }));
+  write(201, { sessionId: 'aaa', status: 'idle', startedAt: 2000, updatedAt: 5 });
+  write(202, { sessionId: 'aaa', status: 'waiting', startedAt: 1000, updatedAt: 6 });
+  write(203, { sessionId: 'aaa', status: 'busy', startedAt: 3000, updatedAt: 7 });
+  const e = running.readRunning(dir, () => true).get('aaa');
+  assert.strictEqual(e.status, 'waiting');
+  assert.strictEqual(e.firstStartedAt.getTime(), 1000);
+});
+
 test('readRunning returns empty when the folder is missing', () => {
   assert.strictEqual(running.readRunning('/nonexistent/cts').size, 0);
 });

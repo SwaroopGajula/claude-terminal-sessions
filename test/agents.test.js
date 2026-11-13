@@ -73,6 +73,21 @@ test('the result comes from SubagentHandback when present', () => {
   assert.strictEqual(act.lastAction, 'Grep: theme');
 });
 
+test('agents from before the session was resumed show as stopped', () => {
+  const s = fakeSession();
+  s.add('agent-old', { agentType: 'general-purpose', description: 'Started before VS Code closed' },
+    [rec('user', 'Old task', '2026-11-13T12:30:00Z')]);
+  s.add('agent-new', { agentType: 'general-purpose', description: 'Started after resuming' },
+    [rec('user', 'New task', '2026-11-13T15:40:00Z')]);
+  const list = Object.fromEntries(agents.listAgents(s.file, 'sess-1').map((a) => [a.id, a]));
+  const resumed = { firstStartedAt: new Date('2026-11-13T15:28:30Z') }; // the new Claude process
+  assert.strictEqual(list['agent-old'].firstRecord.toISOString(), '2026-11-13T12:30:00.000Z');
+  assert.strictEqual(agents.status(list['agent-old'], resumed), 'stopped');
+  assert.strictEqual(agents.status(list['agent-new'], resumed), 'running');
+  assert.strictEqual(agents.status(list['agent-new'], null), 'stopped');
+  assert.strictEqual(agents.status(list['agent-new'], true), 'running'); // no start time known: trust the session
+});
+
 test('describeTool and duration', () => {
   assert.strictEqual(agents.describeTool('Edit', { file_path: '/projects/my-web-app/src/App.tsx' }), 'Edit App.tsx');
   assert.strictEqual(agents.describeTool('Bash', { command: 'git status' }), 'Bash: git status');

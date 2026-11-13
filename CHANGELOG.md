@@ -3,6 +3,7 @@
 ## 0.10.0
 - **Alerts** when a session starts waiting for your input and when an agent of a running session finishes, with buttons to show the terminal or open the conversation. Skipped when you are already looking at that terminal, and shown in only one VS Code window. Settings: `claudeSessions.notifyNeedsInput`, `claudeSessions.notifyAgentDone`.
 - **Context size** of running sessions on their row, and for every session on hover and in *Token usage*: tokens on the latest reply against the model's limit, compactions in the session, and the range at which Claude Code has compacted your sessions before. ⚠ marks sessions near that range.
+- Fix: agents interrupted by closing a session (or quitting VS Code) now show as *Stopped* after the session is resumed, instead of *Running*.
 
 ## 0.9.0
 - **Agents.** See the agents (Agent / Task tool) each session started: a count of running agents on the session row and in the *Running* group, and an *Agents* section with each agent's task, status (running, done or stopped), latest step, duration, model and cost. Hover for the task and the result it handed back; click to open the agent's own conversation. Updates live while agents work.

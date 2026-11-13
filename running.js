@@ -32,6 +32,13 @@ function readRunning(dir = SESSIONS_DIR, alive = isAlive) {
       updatedAt: o.updatedAt ? new Date(o.updatedAt) : null,
     };
     const prev = out.get(o.sessionId);
+    // Earliest start among the processes that have this session open (agents started by any of them are live).
+    const starts = [entry.startedAt, prev && prev.firstStartedAt].filter(Boolean);
+    entry.firstStartedAt = starts.length ? new Date(Math.min(...starts.map(Number))) : null;
+    if (prev && !(rank(entry) > rank(prev) || (rank(entry) === rank(prev) && (entry.updatedAt || 0) > (prev.updatedAt || 0)))) {
+      prev.firstStartedAt = entry.firstStartedAt;
+      continue;
+    }
     // Same session open twice: keep the most "urgent" / most recent entry.
     if (!prev || rank(entry) > rank(prev) || (rank(entry) === rank(prev) && (entry.updatedAt || 0) > (prev.updatedAt || 0))) {
       out.set(o.sessionId, entry);

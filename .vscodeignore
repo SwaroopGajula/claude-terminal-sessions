@@ -7,3 +7,4 @@ media/icon-full.svg
 test/**
 scripts/**
 media/demo.gif
+.dev-mock/**

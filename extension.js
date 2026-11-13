@@ -407,8 +407,8 @@ class SessionsProvider {
   get filtering() { return !!(this.filter || this.contentFilter); }
   // Agents of a session with their status (running only while the session itself is open).
   agentsOf(s) {
-    const open = this.running.has(s.id);
-    return agents.listAgents(s.file, s.id).map((a) => ({ ...a, status: agents.status(a, open) }));
+    const live = this.running.get(s.id) || null;
+    return agents.listAgents(s.file, s.id).map((a) => ({ ...a, status: agents.status(a, live) }));
   }
   isArchived(s) {
     const autoDays = vscode.workspace.getConfiguration('claudeSessions').get('autoArchiveDays', 0);
