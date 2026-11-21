@@ -1,8 +1,8 @@
 {
   "name": "claude-terminal-sessions",
   "displayName": "Claude Terminal Sessions",
-  "description": "Claude Code session manager: every terminal session from every folder in one sidebar. Search inside conversations, see running agents, token usage and cost, resume, fork, pin, label, archive, share, follow-up reminders and daily summaries.",
-  "version": "0.10.2",
+  "description": "Claude Code session manager: every terminal session from every folder in one sidebar. Search inside conversations, see running agents, token usage and cost, see what each session changed, resume, fork, pin, label, archive, share, follow-up reminders and daily summaries.",
+  "version": "0.11.0",
   "publisher": "SwaroopGajula",
   "license": "MIT",
   "repository": {
@@ -256,6 +256,21 @@
         "command": "claudeSessions.reviewChanges",
         "title": "Review All Changes",
         "icon": "$(diff-multiple)"
+      },
+      {
+        "command": "claudeSessions.moveSession",
+        "title": "Move to Folder\u2026",
+        "icon": "$(move)"
+      },
+      {
+        "command": "claudeSessions.copySession",
+        "title": "Copy to Folder\u2026",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "claudeSessions.relinkFolder",
+        "title": "Folder Moved? Relink Sessions\u2026",
+        "icon": "$(link)"
       }
     ],
     "menus": {
@@ -476,6 +491,21 @@
           "command": "claudeSessions.reviewChanges",
           "when": "viewItem =~ /^session( |$)/",
           "group": "2_open@0"
+        },
+        {
+          "command": "claudeSessions.relinkFolder",
+          "when": "viewItem =~ /^session .*\\bmissing\\b/",
+          "group": "7_move@0"
+        },
+        {
+          "command": "claudeSessions.moveSession",
+          "when": "viewItem =~ /^session( |$)/",
+          "group": "7_move@1"
+        },
+        {
+          "command": "claudeSessions.copySession",
+          "when": "viewItem =~ /^session( |$)/",
+          "group": "7_move@2"
         }
       ],
       "commandPalette": [
@@ -581,6 +611,18 @@
         },
         {
           "command": "claudeSessions.reviewChanges",
+          "when": "false"
+        },
+        {
+          "command": "claudeSessions.moveSession",
+          "when": "false"
+        },
+        {
+          "command": "claudeSessions.copySession",
+          "when": "false"
+        },
+        {
+          "command": "claudeSessions.relinkFolder",
           "when": "false"
         }
       ]

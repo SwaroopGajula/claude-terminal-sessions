@@ -140,6 +140,34 @@ A **Running** group at the top shows every Claude Code session that is open righ
 - The status bar shows how many sessions need your input; click it to jump to them
 - Resuming a session that is already open warns you, and offers to **show its terminal** (if it runs in VS Code) or **fork** it instead
 
+### See what a session changed
+The **Files changed** section of an expanded session lists every file Claude (or its agents) changed, with line counts:
+
+```
+▾ 📄 Files changed                        3 · +62 −9
+    ThemeToggle.tsx      src/components · new · +48 −0
+    theme.css            src/styles · +9 −4
+    Header.tsx           src/components · +5 −5
+```
+
+- **Click a file** to open VS Code's diff view: the file *before the session* next to the file *after Claude's last change*
+- **Review All Changes** (on the section or the session's right-click menu) opens every changed file in one multi-file diff, like reviewing a pull request
+- **Compare Before Session with Current File** shows the difference with the file as it is today, including later changes
+- *Before* comes from the backups Claude Code keeps for `/rewind`; *after* is rebuilt from Claude's recorded edits.
+  If a file was also changed another way (for example by a shell command), the diff is marked **approximate**; without any
+  backup, only the changed parts are shown. Nothing is ever written to your files.
+
+### Move, copy or relink sessions
+Claude Code finds a session through the folder it started in. To change that folder:
+
+- **Move to Folder…** (right-click): moves the session, for example after starting it in the wrong folder
+- **Copy to Folder…**: keeps the original and puts a copy (with a new session ID) in another folder, for example another clone
+- Paths inside the conversation that start with the old folder are updated, so Claude works in the new folder when you resume
+- **Folder moved or renamed?** Its sessions show **⚠ folder missing**. Right-click one and choose **Folder Moved? Relink Sessions…**
+  (or click **Relink Folder…** when Resume fails): pick the folder that moved and where it is now, and every session started
+  in it, or inside it, is moved in one go
+- A session that is open in a terminal can't be moved; exit Claude there first
+
 ### Alerts when Claude needs you
 - **Needs your input:** when a session starts waiting for you (for example a permission question), you get an alert with
   **Show Terminal** and **Open Conversation**, even if you are working in another project or window
@@ -312,7 +340,7 @@ Automatic detection is not perfect. **Read the file before sharing it**, and onl
 - **⋯** menu: **Filter by Label…** · **Show / Hide Archived Sessions**
 
 ### Session right-click menu
-Resume in terminal · Fork session · Open conversation · Copy session ID · Copy resume command
+Resume in terminal · Fork session · Open conversation · Review all changes · Move / Copy to folder · Copy session ID · Copy resume command
 (`cd '<folder>' && claude --resume <id>`, in your shell's syntax) · Open folder in new window · Open raw transcript (`.jsonl`) · Share: Export for Reading · Share: Export to Continue on Another Computer · Set Follow-up Reminder · Clear Follow-up · Rename (F2) · Pin to Top / Unpin · Edit Note · Set Labels · Archive / Unarchive · Delete Session (move to Trash)
 
 ## Requirements
@@ -343,7 +371,7 @@ Search **Claude Terminal Sessions** in the Extensions panel (it comes from [Open
 **From a `.vsix` file**
 
 ```bash
-code --install-extension claude-terminal-sessions-0.10.2.vsix
+code --install-extension claude-terminal-sessions-0.11.0.vsix
 ```
 
 or in VS Code: **Extensions** panel → `···` menu → **Install from VSIX…**
@@ -391,8 +419,9 @@ There is no build step and there are no runtime dependencies. The code is plain 
 | `extension.js` | Starts the extension and wires the parts together |
 | `tree.js` | The sidebar: groups, session rows, details, agents |
 | `ui.js` | Shared UI helpers: conversation view, cost and context labels, resume commands |
-| `cmd-*.js`, `alerts.js` | Commands by area (sessions, organize, search, reminders, reports, share) and alerts |
+| `cmd-*.js`, `alerts.js` | Commands by area (sessions, organize, search, reminders, reports, share, diffs, move) and alerts |
 | `sessions.js` | Reading and parsing session files (no VS Code dependency) |
+| `diffs.js`, `move.js` | Rebuilding what a session changed; moving, copying and relinking sessions (no VS Code dependency) |
 | `share.js`, `running.js`, `followups.js`, `summary.js`, `marks.js`, `search.js`, `usage.js`, `shell.js`, `agents.js`, `notify.js` | Logic tested without VS Code |
 
 CI runs the tests on Linux, Windows and macOS.

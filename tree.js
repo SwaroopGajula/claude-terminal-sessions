@@ -227,6 +227,8 @@ class SessionsProvider {
     if (el.groupBy !== 'folder' || el.special) parts.push(path.basename(s.cwd));
     if (!run) parts.push(relTime(s.updated));
     if (m.note) parts.push(`📝 ${truncate(m.note, 40)}`);
+    const missing = !fs.existsSync(s.cwd);
+    if (missing) parts.push('⚠ folder missing');
     const u = s.usage ? usageSummary([s]) : null;
     if (u && showCost() && u.cost >= 0.01) parts.push(usage.formatCost(u.cost));
     it.description = parts.join(' · ');
@@ -244,7 +246,7 @@ class SessionsProvider {
       it.iconPath = new vscode.ThemeIcon('comment-discussion');
     }
     // "session" plus flags; menus match with regexes such as /^session( |$)/ and / pinned( |$)/
-    it.contextValue = ['session', fu && 'fu', m.pinned && 'pinned', archived && 'archived', m.labels && 'labeled', m.note && 'noted'].filter(Boolean).join(' ');
+    it.contextValue = ['session', fu && 'fu', m.pinned && 'pinned', archived && 'archived', m.labels && 'labeled', m.note && 'noted', missing && 'missing'].filter(Boolean).join(' ');
 
     const md = new vscode.MarkdownString(undefined, true);
     md.isTrusted = false;

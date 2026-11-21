@@ -32,7 +32,9 @@ function activate(context) {
   const launch = (s, { fork = false, cwd } = {}) => {
     const dir = cwd || s.cwd;
     if (!fs.existsSync(dir)) {
-      vscode.window.showErrorMessage(`Folder no longer exists: ${dir}`);
+      vscode.window.showErrorMessage(`Folder no longer exists: ${dir}`, 'Relink Folder…').then((pick) => {
+        if (pick) vscode.commands.executeCommand('claudeSessions.relinkFolder', { s });
+      });
       return;
     }
     const bin = vscode.workspace.getConfiguration('claudeSessions').get('claudeCommand', 'claude');
@@ -98,6 +100,7 @@ function activate(context) {
   require('./cmd-reports')(app);
   require('./cmd-share')(app);
   require('./cmd-diffs')(app);
+  require('./cmd-move')(app);
   require('./alerts')(app);
 
   // Auto-refresh when session files change (debounced).
