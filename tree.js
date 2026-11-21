@@ -13,6 +13,7 @@ const usage = require('./usage');
 const shell = require('./shell');
 const agents = require('./agents');
 const notify = require('./notify');
+const diffs = require('./diffs');
 const { PROJECTS_DIR, cache, detailCache, EDIT_TOOLS, textOf, cleanPrompt, parseSession, fmtTime, getDetails, parseDetails, decodeDirName, truncate, loadSessions, relTime, dateBucket, shortPath, mdEscape, setNamesState, setResumeCommand } = require('./sessions');
 const { SCHEME, docProvider, openConversation, usageConfig, usageSummary, showCost, costLabel, updateCompactRange, contextInfo, contextHigh, contextShort, contextLong, IS_WIN, TRASH, REVEAL, resumeCommand, sessionFrom, sessionsFrom } = require('./ui');
 
@@ -132,7 +133,15 @@ class SessionsProvider {
       kids.push({ kind: 'info', s, label: 'Session ID', icon: 'key', value: s.id, cmd: 'claudeSessions.copyId' });
       if (d) {
         kids.push({ kind: 'section', s, label: 'Prompts', icon: 'comment', items: d.prompts.map((p) => ({ kind: 'prompt', s, p })), expanded: true });
-        kids.push({ kind: 'section', s, label: 'Files changed', icon: 'files', items: [...d.files.entries()].map(([fp, f]) => ({ kind: 'file', s, fp, f })) });
+        // Every file the session (or its agents) changed, with what changed; falls back to the transcript's list.
+        const changes = diffs.sessionChanges(s);
+        const fileItems = changes.length
+          ? changes.map((c) => ({ kind: 'file', s, fp: c.file, f: d.files.get(c.file) || { count: c.edits, tools: new Set(), line: 0 }, change: c }))
+          : [...d.files.entries()].map(([fp, f]) => ({ kind: 'file', s, fp, f }));
+        const add = changes.reduce((n, c) => n + c.added, 0);
+        const del = changes.reduce((n, c) => n + c.removed, 0);
+        kids.push({ kind: 'section', s, label: 'Files changed', icon: 'files', items: fileItems, contextValue: fileItems.length ? 'sessionFiles' : undefined,
+          descOverride: changes.length ? `${fileItems.length} · +${add} −${del}` : undefined });
         kids.push({ kind: 'section', s, label: 'Commands run', icon: 'terminal', items: d.commands.map((c) => ({ kind: 'cmd', s, c })) });
       }
       const u = s.usage && usageSummary([s]);
@@ -295,6 +304,7 @@ function childItem(el) {
         : None);
       it.description = el.descOverride || String(el.items.length);
       it.iconPath = new vscode.ThemeIcon(el.icon);
+      if (el.contextValue) it.contextValue = el.contextValue;
       break;
     case 'prompt': {
       const { p } = el;
@@ -306,17 +316,22 @@ function childItem(el) {
       break;
     }
     case 'file': {
-      const { fp, f } = el;
+      const { fp, f, change: c } = el;
       it = new vscode.TreeItem(path.basename(fp), None);
       const inside = summary.relativeIn(s.cwd, fp);
       const rel = inside !== null ? inside.split(/[\\/]/).slice(0, -1).join('/') : shortPath(path.dirname(fp));
-      it.description = `${rel ? rel + ' · ' : ''}${f.count}× ${[...f.tools].join('/')}`;
+      const exists = fs.existsSync(fp);
+      const stats = c ? `${c.created ? 'new · ' : ''}+${c.added} −${c.removed}` : `${f.count}× ${[...f.tools].join('/')}`;
+      it.description = `${rel ? rel + ' · ' : ''}${stats}`;
       it.resourceUri = vscode.Uri.file(fp);
-      it.tooltip = `${fp}\n${f.count} change(s)${fs.existsSync(fp) ? '' : '\n(file no longer exists)'}\n\nClick to open the file`;
-      it.contextValue = 'sessionFile';
-      it.command = fs.existsSync(fp)
-        ? { command: 'vscode.open', title: 'Open file', arguments: [vscode.Uri.file(fp)] }
-        : { command: 'claudeSessions.openConversation', title: 'Open', arguments: [el, f.line] };
+      const note = !c ? '' : c.mode === 'approximate' ? '\nApproximate: the file was also changed outside Claude\'s edit tools'
+        : c.mode === 'parts' ? '\nOnly the changed parts are known (no backup of the whole file)' : '';
+      it.tooltip = `${fp}\n${c ? `${c.edits} change(s) by Claude · +${c.added} −${c.removed} lines${c.created ? ' · created in this session' : ''}` : `${f.count} change(s)`}${note}${exists ? '' : '\n(file no longer exists)'}\n\nClick to see what Claude changed`;
+      it.contextValue = exists ? 'sessionFile' : 'sessionFileGone';
+      it.command = c
+        ? { command: 'claudeSessions.showChanges', title: 'Show changes', arguments: [el] }
+        : exists ? { command: 'vscode.open', title: 'Open file', arguments: [vscode.Uri.file(fp)] }
+          : { command: 'claudeSessions.openConversation', title: 'Open', arguments: [el, f.line] };
       break;
     }
     case 'agent': {

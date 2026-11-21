@@ -97,6 +97,7 @@ function activate(context) {
   require('./cmd-reminders')(app);
   require('./cmd-reports')(app);
   require('./cmd-share')(app);
+  require('./cmd-diffs')(app);
   require('./alerts')(app);
 
   // Auto-refresh when session files change (debounced).
