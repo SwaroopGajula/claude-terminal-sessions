@@ -49,7 +49,7 @@
     "onStartupFinished"
   ],
   "scripts": {
-    "lint": "node --check extension.js && node --check share.js && node --check running.js && node --check followups.js && node --check summary.js && node --check marks.js && node --check search.js && node --check paths.js && node --check usage.js && node --check shell.js && node --check agents.js && node --check notify.js",
+    "lint": "node scripts/check.js",
     "test": "node --test test/*.test.js",
     "package": "npx --yes @vscode/vsce@4.1.0 package"
   },

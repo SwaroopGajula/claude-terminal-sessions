@@ -384,7 +384,18 @@ npm run package   # builds claude-terminal-sessions-<version>.vsix
 code --install-extension claude-terminal-sessions-*.vsix
 ```
 
-There is no build step and there are no runtime dependencies. `extension.js` is the UI; the logic lives in plain JavaScript modules that are tested without VS Code: `share.js` (export/import), `running.js`, `followups.js`, `summary.js`, `marks.js` (pins, notes, labels, archive), `search.js`, `usage.js` (tokens and cost), `shell.js` (command lines per shell), `agents.js` (subagents) and `notify.js` (alerts). CI runs the tests on Linux, Windows and macOS.
+There is no build step and there are no runtime dependencies. The code is plain JavaScript:
+
+| File | What it does |
+|---|---|
+| `extension.js` | Starts the extension and wires the parts together |
+| `tree.js` | The sidebar: groups, session rows, details, agents |
+| `ui.js` | Shared UI helpers: conversation view, cost and context labels, resume commands |
+| `cmd-*.js`, `alerts.js` | Commands by area (sessions, organize, search, reminders, reports, share) and alerts |
+| `sessions.js` | Reading and parsing session files (no VS Code dependency) |
+| `share.js`, `running.js`, `followups.js`, `summary.js`, `marks.js`, `search.js`, `usage.js`, `shell.js`, `agents.js`, `notify.js` | Logic tested without VS Code |
+
+CI runs the tests on Linux, Windows and macOS.
 
 ### Demo data for screenshots
 `node scripts/demo.js` creates invented sessions in `~/claude-demo` and opens a separate VS Code window that shows only them,
