@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.11.1
+- New Marketplace description and README opening that lead with what sets the extension apart: handing a session to a teammate, follow-up reminders, the standup-ready daily summary and relinking moved folders. No code changes.
+
 ## 0.11.0
 - **See what a session changed.** *Files changed* shows `+added −removed` per file (including files changed by agents and new files). Click a file for VS Code's diff view (before the session ↔ after Claude's last change), compare the pre-session file with today's, or **Review All Changes** in one multi-file diff. Built from Claude Code's `/rewind` backups and recorded edits; marked approximate when a file was also changed another way.
 - **Move to Folder…** and **Copy to Folder…** for sessions, with paths inside the conversation updated.

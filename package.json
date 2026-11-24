@@ -2,7 +2,7 @@
   "name": "claude-terminal-sessions",
   "displayName": "Claude Terminal Sessions",
   "description": "Hand a Claude Code session to a teammate to resume, get follow-up reminders and a standup-ready daily summary. Every session from every folder in one sidebar: search, resume, live agents, cost and diffs.",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "publisher": "SwaroopGajula",
   "license": "MIT",
   "repository": {
