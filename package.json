@@ -1,7 +1,7 @@
 {
   "name": "claude-terminal-sessions",
   "displayName": "Claude Terminal Sessions",
-  "description": "Claude Code session manager: every terminal session from every folder in one sidebar. Search inside conversations, see running agents, token usage and cost, see what each session changed, resume, fork, pin, label, archive, share, follow-up reminders and daily summaries.",
+  "description": "Hand a Claude Code session to a teammate to resume, get follow-up reminders and a standup-ready daily summary. Every session from every folder in one sidebar: search, resume, live agents, cost and diffs.",
   "version": "0.11.0",
   "publisher": "SwaroopGajula",
   "license": "MIT",
@@ -35,7 +35,10 @@
     "productivity",
     "cursor",
     "token usage",
-    "cost"
+    "cost",
+    "handoff",
+    "standup",
+    "reminders"
   ],
   "engines": {
     "vscode": "^1.90.0"

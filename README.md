@@ -5,8 +5,8 @@
 <h1 align="center">Claude Terminal Sessions</h1>
 
 <p align="center">
-  Every Claude Code session you have run in the terminal, from every project folder, in one VS Code sidebar.<br>
-  See what each session was about, what it changed, and jump back in with one click.
+  Every Claude Code terminal session, from every project folder, in one VS Code sidebar.<br>
+  Hand a session to a teammate, get reminded to follow up, and get a standup-ready summary of your day.
 </p>
 
 <p align="center">
@@ -17,6 +17,19 @@
 </p>
 
 <p align="center"><img src="media/demo.gif" width="900" alt="Claude Terminal Sessions demo: running sessions, session details, search inside conversations, pin and resume"></p>
+
+## What makes it different
+
+- **Hand a session to a teammate.** Export it as one file, with likely secrets removed. They import it and continue the
+  conversation, with its full context, on their own computer.
+- **Follow-up reminders.** *"Check this deploy again in 3 days"*: the session reminds you on that date, with **Resume**,
+  **Snooze** and **Done**.
+- **A standup-ready daily summary.** What you asked, committed, opened as pull requests and changed, per project, ready to paste.
+- **Folder moved or renamed? Relink it.** Sessions of a moved repo are marked, and one command brings them all back.
+
+Plus everything you expect: search inside every conversation, one-click resume and fork, live status of sessions and their
+agents, alerts when Claude needs you, cost per session and diffs of what each session changed. Free, open source, and
+everything stays on your computer.
 
 ---
 
@@ -29,6 +42,102 @@ When you use Claude Code across many repos, sessions pile up in different folder
 (`~/.claude/projects`) and shows all of it, across all folders, grouped by day.
 
 ## Features
+
+### Hand a session to a teammate
+Right-click a session → **Share**:
+
+| Option | What the other person gets | Needs Claude Code? |
+|---|---|---|
+| **Export for Reading (.md)** | A readable Markdown file: prompts, Claude's replies, files changed and commands run (no command output) | No |
+| **Export to Continue on Another Computer** | A `.claude-session.json` file they can import and **resume with full context** | Yes |
+
+#### Export (the person sharing)
+1. Open the **Claude Terminal Sessions** sidebar and find the session.
+2. Right-click it and choose **Share: Export for Reading (.md)** or **Share: Export to Continue on Another Computer**.
+3. Read the warning. It shows how many likely secrets were removed automatically. Click **Save…**.
+4. Choose where to save the file (defaults to your `Downloads` folder).
+5. Click **Open** to check the file, then send it (Slack, email, shared drive…).
+
+#### Import (the person receiving)
+*A `.md` export needs no import: just open it in any editor or Markdown viewer.*
+
+For a `.claude-session.json` export:
+1. Install **Claude Terminal Sessions** and [Claude Code](https://docs.claude.com/en/docs/claude-code).
+2. Get the same project on your computer (clone the repo). Ideally check out the branch the session was on.
+3. Open the **Claude Terminal Sessions** sidebar and click **Import Shared Session** (📥) in the toolbar.
+4. Pick the `.claude-session.json` file.
+5. Choose your local copy of the project. Folders with the same name are suggested first, or use **Browse…**.
+6. If the session already exists on your computer, choose **Import as a copy** (it gets a new session ID).
+7. Click **Resume now**. Claude Code opens in that folder with the full conversation, ready to continue.
+   The session also appears in the sidebar, so you can resume it later.
+
+**Before you share:** session files can contain anything that went through the session, including command output,
+file contents, environment variables and internal URLs. The extension:
+- removes likely secrets automatically (GitHub, GitLab, npm, Slack and Stripe tokens, AWS and Google keys, Anthropic and OpenAI keys, JWTs, private keys, passwords in URLs, and values of settings like `DB_PASSWORD` or `API_KEY`) and tells you how many it found
+- leaves out Claude Code's internal request logs
+- warns you before every export
+
+Automatic detection is not perfect. **Read the file before sharing it**, and only share with people who may see that code and data.
+
+### Follow-up reminders
+For tasks you need to check on again in a few days (waiting for a deploy, a review, a data refresh…):
+
+1. Right-click a session → **Set Follow-up Reminder…** (or click **Set follow-up…** inside an expanded session)
+2. Choose **Tomorrow**, **In 2 / 3 days**, **Next Monday**, **In 1 / 2 weeks**, **In N days…** or **On a date…** (YYYY-MM-DD)
+3. Add an optional note, e.g. *check the deploy*, or press **Enter** / **Escape** to skip it
+4. A confirmation shows the date, with a **Change** button if you picked the wrong one
+
+Then:
+- A **Follow-ups** group appears at the top, soonest first, with *due tomorrow*, *due today*, *overdue 2 days*
+- On the due date you get a reminder with **Resume**, **Snooze 1 Day** and **Done**
+- The status bar shows how many follow-ups are due; click it to see them
+- A session that is also running keeps its running icon (🔄 / 🔔 / 🟢) but still shows *⏰ due …* on its row
+- To change or remove one: right-click → **Set Follow-up Reminder…** (pick a new date or **Clear follow-up**) or **Clear Follow-up**
+
+```
+▾ 🔔 Follow-ups                 1 due · 2 total
+    🔔 fix-login-bug             ⏰ due today · api-server
+    🔕 update-docs               ⏰ due in 3 days · docs-site
+```
+
+Reminders appear while VS Code is open; if it was closed on the due date, you get the reminder the next time you open it.
+Follow-ups are stored by the extension (in VS Code's storage), not in Claude Code's files.
+
+### Standup-ready daily summary
+Click **Daily Summary** (📅) in the toolbar and pick **Today**, **Yesterday**, **Last working day**, **This week**, **Last 7 days**
+or a date. You get a Markdown report, ready for a standup or timesheet, of only the work done in that period:
+
+```markdown
+# Claude Code summary: Yesterday, Thursday, November 5, 2026
+
+_2 sessions · 6 prompts · 4 files changed · 2 commits_
+
+## my-web-app
+### dark-mode-toggle
+Branch `feature/dark-mode` · 10:12 AM – 11:40 AM · 4 prompts
+
+**Asked:**
+- Add a dark mode toggle to the settings page
+- Write tests for the toggle
+**Commits (pushed):**
+- `feat: add dark mode toggle`
+- `test: cover theme toggle`
+**Files changed (3):** `src/components/ThemeToggle.tsx`, `src/styles/theme.css`, `src/components/ThemeToggle.test.tsx`
+```
+
+Commits and pull requests are detected from the git and `gh` commands Claude ran; failed commands are left out.
+Copy it to the clipboard or open the preview from the notification.
+
+### Move, copy or relink sessions
+Claude Code finds a session through the folder it started in. To change that folder:
+
+- **Move to Folder…** (right-click): moves the session, for example after starting it in the wrong folder
+- **Copy to Folder…**: keeps the original and puts a copy (with a new session ID) in another folder, for example another clone
+- Paths inside the conversation that start with the old folder are updated, so Claude works in the new folder when you resume
+- **Folder moved or renamed?** Its sessions show **⚠ folder missing**. Right-click one and choose **Folder Moved? Relink Sessions…**
+  (or click **Relink Folder…** when Resume fails): pick the folder that moved and where it is now, and every session started
+  in it, or inside it, is moved in one go
+- A session that is open in a terminal can't be moved; exit Claude there first
 
 ### All sessions, everywhere
 - Sessions from **every folder**, newest first
@@ -59,73 +168,6 @@ and the files it changed. All words must appear on the same line, in any order; 
 
 The 🔍 **Filter** button is the quick version: it only looks at titles, prompts, folders, branches, session IDs, notes and labels.
 
-### Token usage and cost
-See how many tokens each session used and roughly what that would cost at Anthropic API list prices:
-
-- **On each row:** the estimated cost, e.g. `my-web-app · 2h ago · $4.20`
-- **On hover:** cost, output tokens, input tokens, cache reads and the models used
-- **Inside an expanded session:** a **Token usage** section with the totals and a line per model
-- **Daily summary:** the estimated cost per session and for the whole period
-- **Token Usage and Cost Report** (📈 in the toolbar): pick *Today*, *Yesterday*, *This week*, *Last 7 / 30 days* or *All time*
-  for a report by day, model, project and the most expensive sessions:
-
-```markdown
-# Claude Code usage: Last 7 days (2026-11-04 to 2026-11-10)
-
-**≈ $86.40** · 720K output · 3.1M input · 210M cache reads · 1,120 requests
-
-| Day        | Cost   | Output | Requests |
-|------------|-------:|-------:|---------:|
-| 2026-11-10 | $12.30 | 95K    | 160      |
-| 2026-11-09 | $31.75 | 260K   | 410      |
-```
-
-How it is calculated:
-- Prices are per model (Fable, Opus, Sonnet and Haiku generations), including **cache reads and writes**, which are usually most of
-  the tokens in a Claude Code session. Fast mode counts at 2× and subagent (Task tool) transcripts are included.
-- Claude Code writes each reply into the transcript several times; every reply is counted **once**.
-- It is an **estimate at API list prices**. On a Pro or Max plan you pay the subscription instead, so read it as what the same work
-  would cost through the API. Hide the cost with `claudeSessions.showCost: false` (token counts stay).
-- Prices can change. Override or add a model with `claudeSessions.modelPricing` (US$ per million tokens), e.g.
-  `{"claude-opus-5-5": {"input": 4, "output": 20, "cacheRead": 0.2, "cacheWrite5m": 5, "cacheWrite1h": 8}}`.
-  Models without a known price show their tokens and are marked as not priced.
-
-### Pin, notes and labels
-Right-click a session (or click the rows inside an expanded session):
-
-- **Rename…** (or select it and press **F2**): give a session your own name when Claude's automatic title is vague.
-  The new name is used everywhere in the extension (list, search, summaries, exports). Claude Code's own title is unchanged,
-  shown on hover, and still matches the filter. Clear the name to go back to it.
-- **Pin to Top**: the session also appears in a 📌 **Pinned** group at the top of the list. **Unpin** removes it.
-- **Edit Note…**: a line of your own, e.g. *step 2 of 4 done, next: tests*. It shows on the row (📝) and on hover. Clear the text to remove it.
-- **Set Labels…**: tags like `#bug`, `#feature` or `#research`. Check existing labels, or type a new one and press **Enter**.
-  Labels show on the row.
-
-```
-▾ 📌 Pinned                     1
-    📌 dark-mode-toggle          #feature · my-web-app · 2h ago · 📝 step 2 of 4 done
-▾ 📅 Today                      3
-    💬 fix-login-redirect        #bug · api-server · 20m ago
-```
-
-To see one label only: **⋯** menu in the toolbar → **Filter by Label…**, or type `#bug` in the 🔍 filter
-(you can combine it with words, e.g. `#bug login`).
-
-Select several sessions (**Cmd/Ctrl+click** or **Shift+click**) to pin, label, archive or delete them together.
-
-### Archive or delete finished sessions
-- **Archive (hide from list)**: hides the session so the list only shows active work. Nothing is deleted, and an **Undo** button appears.
-  If you resume an archived session it comes back automatically.
-- **⋯** menu → **Show Archived Sessions**: shows an **Archived** group at the bottom, where you can **Unarchive**.
-  Filters and searches always include archived sessions.
-- **Auto-archive**: set `claudeSessions.autoArchiveDays` (e.g. `30`) to hide sessions you have not used for that many days.
-  Pinned sessions and sessions with a follow-up are never auto-archived.
-- **Delete Session (move to Trash)…**: removes the session for good. After a confirmation, the conversation file and its
-  side files (subagent transcripts, file backups used by `/rewind`) go to the **Trash**, so you can still restore them from there.
-  A session that is open in a terminal cannot be deleted until you exit Claude there.
-
-Pins, notes, labels and archive state are stored by the extension (in VS Code's storage), not in Claude Code's files.
-
 ### See which sessions are running
 A **Running** group at the top shows every Claude Code session that is open right now, in any terminal, live:
 
@@ -139,48 +181,6 @@ A **Running** group at the top shows every Claude Code session that is open righ
 - 🔄 **Working**: Claude is busy · 🔔 **Needs input**: waiting for you (e.g. a permission question) · 🟢 **Open**: idle
 - The status bar shows how many sessions need your input; click it to jump to them
 - Resuming a session that is already open warns you, and offers to **show its terminal** (if it runs in VS Code) or **fork** it instead
-
-### See what a session changed
-The **Files changed** section of an expanded session lists every file Claude (or its agents) changed, with line counts:
-
-```
-▾ 📄 Files changed                        3 · +62 −9
-    ThemeToggle.tsx      src/components · new · +48 −0
-    theme.css            src/styles · +9 −4
-    Header.tsx           src/components · +5 −5
-```
-
-- **Click a file** to open VS Code's diff view: the file *before the session* next to the file *after Claude's last change*
-- **Review All Changes** (on the section or the session's right-click menu) opens every changed file in one multi-file diff, like reviewing a pull request
-- **Compare Before Session with Current File** shows the difference with the file as it is today, including later changes
-- *Before* comes from the backups Claude Code keeps for `/rewind`; *after* is rebuilt from Claude's recorded edits.
-  If a file was also changed another way (for example by a shell command), the diff is marked **approximate**; without any
-  backup, only the changed parts are shown. Nothing is ever written to your files.
-
-### Move, copy or relink sessions
-Claude Code finds a session through the folder it started in. To change that folder:
-
-- **Move to Folder…** (right-click): moves the session, for example after starting it in the wrong folder
-- **Copy to Folder…**: keeps the original and puts a copy (with a new session ID) in another folder, for example another clone
-- Paths inside the conversation that start with the old folder are updated, so Claude works in the new folder when you resume
-- **Folder moved or renamed?** Its sessions show **⚠ folder missing**. Right-click one and choose **Folder Moved? Relink Sessions…**
-  (or click **Relink Folder…** when Resume fails): pick the folder that moved and where it is now, and every session started
-  in it, or inside it, is moved in one go
-- A session that is open in a terminal can't be moved; exit Claude there first
-
-### Alerts when Claude needs you
-- **Needs your input:** when a session starts waiting for you (for example a permission question), you get an alert with
-  **Show Terminal** and **Open Conversation**, even if you are working in another project or window
-- **Agent finished:** when an agent started by a running session finishes, with **Open Agent** to read its answer
-- Needs-input alerts are skipped while you are typing in that session's terminal; every alert shows in only one VS Code window
-- Turn them off with `claudeSessions.notifyNeedsInput` and `claudeSessions.notifyAgentDone`
-
-### Context size
-Running sessions show how much context Claude saw on its latest reply, e.g. `Working · context 245K (25%)`:
-
-- Hover (or the **Token usage** section) shows the size against the model's limit, how often the session was compacted, and the
-  range at which Claude Code has compacted **your** sessions before, e.g. *usually compacts your sessions at 210K–590K*
-- **⚠** marks a session near that range or above 80% of the limit: a good moment for `/compact` or a fresh session
 
 ### See what agents are doing
 When Claude starts agents (the Agent / Task tool, e.g. to explore code or run work in parallel), you can follow them:
@@ -200,58 +200,29 @@ When Claude starts agents (the Agent / Task tool, e.g. to explore code or run wo
 - **Stopped** means the Claude process that started the agent ended first: the session was closed (or VS Code quit) before the agent finished, even if you resumed the session later
 - Click an agent to open its own conversation: its task, every step, and its answer
 
-### Fork a session
-Right-click → **Fork Session** (or *Fork session* inside an expanded session) starts a new copy of the conversation with the full
-context (`claude --resume <id> --fork-session`). The original is left untouched, which is handy for trying a different approach.
+### Alerts when Claude needs you
+- **Needs your input:** when a session starts waiting for you (for example a permission question), you get an alert with
+  **Show Terminal** and **Open Conversation**, even if you are working in another project or window
+- **Agent finished:** when an agent started by a running session finishes, with **Open Agent** to read its answer
+- Needs-input alerts are skipped while you are typing in that session's terminal; every alert shows in only one VS Code window
+- Turn them off with `claudeSessions.notifyNeedsInput` and `claudeSessions.notifyAgentDone`
 
-### Follow-up reminders
-For tasks you need to check on again in a few days (waiting for a deploy, a review, a data refresh…):
-
-1. Right-click a session → **Set Follow-up Reminder…** (or click **Set follow-up…** inside an expanded session)
-2. Choose **Tomorrow**, **In 2 / 3 days**, **Next Monday**, **In 1 / 2 weeks**, **In N days…** or **On a date…** (YYYY-MM-DD)
-3. Add an optional note, e.g. *check the deploy*, or press **Enter** / **Escape** to skip it
-4. A confirmation shows the date, with a **Change** button if you picked the wrong one
-
-Then:
-- A **Follow-ups** group appears at the top, soonest first, with *due tomorrow*, *due today*, *overdue 2 days*
-- On the due date you get a reminder with **Resume**, **Snooze 1 Day** and **Done**
-- The status bar shows how many follow-ups are due; click it to see them
-- A session that is also running keeps its running icon (🔄 / 🔔 / 🟢) but still shows *⏰ due …* on its row
-- To change or remove one: right-click → **Set Follow-up Reminder…** (pick a new date or **Clear follow-up**) or **Clear Follow-up**
+### See what a session changed
+The **Files changed** section of an expanded session lists every file Claude (or its agents) changed, with line counts:
 
 ```
-▾ 🔔 Follow-ups                 1 due · 2 total
-    🔔 fix-login-bug             ⏰ due today · api-server
-    🔕 update-docs               ⏰ due in 3 days · docs-site
+▾ 📄 Files changed                        3 · +62 −9
+    ThemeToggle.tsx      src/components · new · +48 −0
+    theme.css            src/styles · +9 −4
+    Header.tsx           src/components · +5 −5
 ```
 
-Reminders appear while VS Code is open; if it was closed on the due date, you get the reminder the next time you open it.
-Follow-ups are stored by the extension (in VS Code's storage), not in Claude Code's files.
-
-### Daily summary
-Click **Daily Summary** (📅) in the toolbar and pick **Today**, **Yesterday**, **Last working day**, **This week**, **Last 7 days**
-or a date. You get a Markdown report, ready for a standup or timesheet, of only the work done in that period:
-
-```markdown
-# Claude Code summary: Yesterday, Thursday, November 5, 2026
-
-_2 sessions · 6 prompts · 4 files changed · 2 commits_
-
-## my-web-app
-### dark-mode-toggle
-Branch `feature/dark-mode` · 10:12 AM – 11:40 AM · 4 prompts
-
-**Asked:**
-- Add a dark mode toggle to the settings page
-- Write tests for the toggle
-**Commits (pushed):**
-- `feat: add dark mode toggle`
-- `test: cover theme toggle`
-**Files changed (3):** `src/components/ThemeToggle.tsx`, `src/styles/theme.css`, `src/components/ThemeToggle.test.tsx`
-```
-
-Commits and pull requests are detected from the git and `gh` commands Claude ran; failed commands are left out.
-Copy it to the clipboard or open the preview from the notification.
+- **Click a file** to open VS Code's diff view: the file *before the session* next to the file *after Claude's last change*
+- **Review All Changes** (on the section or the session's right-click menu) opens every changed file in one multi-file diff, like reviewing a pull request
+- **Compare Before Session with Current File** shows the difference with the file as it is today, including later changes
+- *Before* comes from the backups Claude Code keeps for `/rewind`; *after* is rebuilt from Claude's recorded edits.
+  If a file was also changed another way (for example by a shell command), the diff is marked **approximate**; without any
+  backup, only the changed parts are shown. Nothing is ever written to your files.
 
 ### Expand a session to see its context
 ```
@@ -293,41 +264,83 @@ Copy it to the clipboard or open the preview from the notification.
 | **Changed file** | Opens the file | |
 | **Command run** | Shows it in the conversation | Copy, or paste into a terminal (not run until you press Enter) |
 
-### Share a session with someone else
-Right-click a session → **Share**:
+### Fork a session
+Right-click → **Fork Session** (or *Fork session* inside an expanded session) starts a new copy of the conversation with the full
+context (`claude --resume <id> --fork-session`). The original is left untouched, which is handy for trying a different approach.
 
-| Option | What the other person gets | Needs Claude Code? |
-|---|---|---|
-| **Export for Reading (.md)** | A readable Markdown file: prompts, Claude's replies, files changed and commands run (no command output) | No |
-| **Export to Continue on Another Computer** | A `.claude-session.json` file they can import and **resume with full context** | Yes |
+### Token usage and cost
+See how many tokens each session used and roughly what that would cost at Anthropic API list prices:
 
-#### Export (the person sharing)
-1. Open the **Claude Terminal Sessions** sidebar and find the session.
-2. Right-click it and choose **Share: Export for Reading (.md)** or **Share: Export to Continue on Another Computer**.
-3. Read the warning. It shows how many likely secrets were removed automatically. Click **Save…**.
-4. Choose where to save the file (defaults to your `Downloads` folder).
-5. Click **Open** to check the file, then send it (Slack, email, shared drive…).
+- **On each row:** the estimated cost, e.g. `my-web-app · 2h ago · $4.20`
+- **On hover:** cost, output tokens, input tokens, cache reads and the models used
+- **Inside an expanded session:** a **Token usage** section with the totals and a line per model
+- **Daily summary:** the estimated cost per session and for the whole period
+- **Token Usage and Cost Report** (📈 in the toolbar): pick *Today*, *Yesterday*, *This week*, *Last 7 / 30 days* or *All time*
+  for a report by day, model, project and the most expensive sessions:
 
-#### Import (the person receiving)
-*A `.md` export needs no import: just open it in any editor or Markdown viewer.*
+```markdown
+# Claude Code usage: Last 7 days (2026-11-04 to 2026-11-10)
 
-For a `.claude-session.json` export:
-1. Install **Claude Terminal Sessions** and [Claude Code](https://docs.claude.com/en/docs/claude-code).
-2. Get the same project on your computer (clone the repo). Ideally check out the branch the session was on.
-3. Open the **Claude Terminal Sessions** sidebar and click **Import Shared Session** (📥) in the toolbar.
-4. Pick the `.claude-session.json` file.
-5. Choose your local copy of the project. Folders with the same name are suggested first, or use **Browse…**.
-6. If the session already exists on your computer, choose **Import as a copy** (it gets a new session ID).
-7. Click **Resume now**. Claude Code opens in that folder with the full conversation, ready to continue.
-   The session also appears in the sidebar, so you can resume it later.
+**≈ $86.40** · 720K output · 3.1M input · 210M cache reads · 1,120 requests
 
-**Before you share:** session files can contain anything that went through the session, including command output,
-file contents, environment variables and internal URLs. The extension:
-- removes likely secrets automatically (GitHub, GitLab, npm, Slack and Stripe tokens, AWS and Google keys, Anthropic and OpenAI keys, JWTs, private keys, passwords in URLs, and values of settings like `DB_PASSWORD` or `API_KEY`) and tells you how many it found
-- leaves out Claude Code's internal request logs
-- warns you before every export
+| Day        | Cost   | Output | Requests |
+|------------|-------:|-------:|---------:|
+| 2026-11-10 | $12.30 | 95K    | 160      |
+| 2026-11-09 | $31.75 | 260K   | 410      |
+```
 
-Automatic detection is not perfect. **Read the file before sharing it**, and only share with people who may see that code and data.
+How it is calculated:
+- Prices are per model (Fable, Opus, Sonnet and Haiku generations), including **cache reads and writes**, which are usually most of
+  the tokens in a Claude Code session. Fast mode counts at 2× and subagent (Task tool) transcripts are included.
+- Claude Code writes each reply into the transcript several times; every reply is counted **once**.
+- It is an **estimate at API list prices**. On a Pro or Max plan you pay the subscription instead, so read it as what the same work
+  would cost through the API. Hide the cost with `claudeSessions.showCost: false` (token counts stay).
+- Prices can change. Override or add a model with `claudeSessions.modelPricing` (US$ per million tokens), e.g.
+  `{"claude-opus-5-5": {"input": 4, "output": 20, "cacheRead": 0.2, "cacheWrite5m": 5, "cacheWrite1h": 8}}`.
+  Models without a known price show their tokens and are marked as not priced.
+
+### Context size
+Running sessions show how much context Claude saw on its latest reply, e.g. `Working · context 245K (25%)`:
+
+- Hover (or the **Token usage** section) shows the size against the model's limit, how often the session was compacted, and the
+  range at which Claude Code has compacted **your** sessions before, e.g. *usually compacts your sessions at 210K–590K*
+- **⚠** marks a session near that range or above 80% of the limit: a good moment for `/compact` or a fresh session
+
+### Pin, notes and labels
+Right-click a session (or click the rows inside an expanded session):
+
+- **Rename…** (or select it and press **F2**): give a session your own name when Claude's automatic title is vague.
+  The new name is used everywhere in the extension (list, search, summaries, exports). Claude Code's own title is unchanged,
+  shown on hover, and still matches the filter. Clear the name to go back to it.
+- **Pin to Top**: the session also appears in a 📌 **Pinned** group at the top of the list. **Unpin** removes it.
+- **Edit Note…**: a line of your own, e.g. *step 2 of 4 done, next: tests*. It shows on the row (📝) and on hover. Clear the text to remove it.
+- **Set Labels…**: tags like `#bug`, `#feature` or `#research`. Check existing labels, or type a new one and press **Enter**.
+  Labels show on the row.
+
+```
+▾ 📌 Pinned                     1
+    📌 dark-mode-toggle          #feature · my-web-app · 2h ago · 📝 step 2 of 4 done
+▾ 📅 Today                      3
+    💬 fix-login-redirect        #bug · api-server · 20m ago
+```
+
+To see one label only: **⋯** menu in the toolbar → **Filter by Label…**, or type `#bug` in the 🔍 filter
+(you can combine it with words, e.g. `#bug login`).
+
+Select several sessions (**Cmd/Ctrl+click** or **Shift+click**) to pin, label, archive or delete them together.
+
+### Archive or delete finished sessions
+- **Archive (hide from list)**: hides the session so the list only shows active work. Nothing is deleted, and an **Undo** button appears.
+  If you resume an archived session it comes back automatically.
+- **⋯** menu → **Show Archived Sessions**: shows an **Archived** group at the bottom, where you can **Unarchive**.
+  Filters and searches always include archived sessions.
+- **Auto-archive**: set `claudeSessions.autoArchiveDays` (e.g. `30`) to hide sessions you have not used for that many days.
+  Pinned sessions and sessions with a follow-up are never auto-archived.
+- **Delete Session (move to Trash)…**: removes the session for good. After a confirmation, the conversation file and its
+  side files (subagent transcripts, file backups used by `/rewind`) go to the **Trash**, so you can still restore them from there.
+  A session that is open in a terminal cannot be deleted until you exit Claude there.
+
+Pins, notes, labels and archive state are stored by the extension (in VS Code's storage), not in Claude Code's files.
 
 ### Toolbar
 - 📅 **Daily Summary** of your Claude Code work
